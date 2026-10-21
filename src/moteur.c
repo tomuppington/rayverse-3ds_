@@ -570,11 +570,18 @@ void DO_ANIM(obj_t* obj) {
     }
 
     anim_t* anim = obj->animations + obj->anim_index;
-    if ((obj->change_anim_mode == ANIMMODE_RESET_IF_NEW && obj->anim_index != prev_anim_index) || obj->change_anim_mode == ANIMMODE_RESET) {
-        if (eta->flags & eta_flags_0x10_anim_reverse) {
-            obj->anim_frame = anim->frames_count - 1;
-        } else {
-            obj->anim_frame = 0;
+    // Fix (3DS port): the state's sound must play on every state change requested with
+    // ANIMMODE_RESET_IF_NEW, even when the new state reuses the same animation - only the frame reset
+    // depends on the animation changing. This matches the matching PS1 decompilation (DO_ANIM in
+    // rayman-ps1-decomp). Previously, e.g. the flying fist's whoosh never played, because a throw
+    // reuses the fist's previous animation.
+    if (obj->change_anim_mode == ANIMMODE_RESET_IF_NEW || obj->change_anim_mode == ANIMMODE_RESET) {
+        if (obj->change_anim_mode == ANIMMODE_RESET || obj->anim_index != prev_anim_index) {
+            if (eta->flags & eta_flags_0x10_anim_reverse) {
+                obj->anim_frame = anim->frames_count - 1;
+            } else {
+                obj->anim_frame = 0;
+            }
         }
         if (obj->is_active != 0) {
             PlaySnd(eta->sound_index, obj->id);
