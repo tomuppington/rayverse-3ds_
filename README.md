@@ -11,13 +11,15 @@ The PlayStation version's data is a different format and does not work.
 1. Download `rayverse3ds.3dsx` from the latest successful run under the **Actions** tab, and copy it to `sdmc:/3ds/`.
 2. Copy the contents of your Rayman 1 PC game folder to `sdmc:/3ds/rayverse/`
    (so `sdmc:/3ds/rayverse/RAY.LNG`, `sdmc:/3ds/rayverse/PCMAP/` etc. exist; add the `Music` folder for music).
+   Optional: a `MusicPS1` folder of OGG files converted from your own PlayStation disc switches to the PS1
+   soundtrack (per-level music, death and level-complete music). Remove/rename the folder to use the PC music.
 3. Sound needs `sdmc:/3ds/dspfirm.cdc` (create it once with the DSP1 homebrew).
 4. Start **Rayverse 3DS** from the Homebrew Launcher.
 
 ## Controls
 
-D-pad / Circle Pad: move · B: jump · Y: punch · X: action · A: confirm · START: menu · SELECT: pause ·
-hold L+R+SELECT: quit
+D-pad / Circle Pad: move · B: jump · Y: punch · X: action · Down+Left/Right: crawl · A: confirm ·
+START: menu · SELECT: pause · tap touch screen: change picture size · hold L+R+SELECT: quit
 
 ## Status
 

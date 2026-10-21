@@ -38,6 +38,7 @@ ogg_t open_cd_vorbis(s32 track_number, bool looping) {
 				result.file = NULL;
 				result.sample_count = stb_vorbis_stream_length_in_samples(decoder);
                 result.looping = looping;
+				result.samples_left = -1;
 				return result;
 			}
 		}
@@ -66,20 +67,48 @@ void play_cd_track(s32 track_number, bool looping) {
 //float volume = 0.5f;
 
 void play_ogg(game_sound_buffer_t* sound_buffer, ogg_t* ogg) {
+	// Rewritten for the 3DS port: fills the whole request even across a loop point or a change of
+	// track (the old version left a gap at every loop and cleared the wrong part of the buffer), and
+	// supports the PS1 soundtrack's excerpts, fade-ins and track sequences (see ps1_music.c).
 	s32 samples_requested = sound_buffer->sample_count;
-	s32 samples_filled = stb_vorbis_get_samples_short_interleaved(ogg->decoder, 2, sound_buffer->samples, samples_requested * 2);
-	if (samples_filled < samples_requested) {
-		s32 bytes_per_sample = sizeof(short) * 2;
-		s32 bytes_filled = samples_filled * bytes_per_sample;
-		s32 remaining_bytes = (samples_requested - samples_filled) * bytes_per_sample;
-		memset(sound_buffer->samples + bytes_filled, 0, remaining_bytes);
-		if (samples_filled == 0) {
-            stb_vorbis_seek_start(ogg->decoder); // loop track (rewind to start)
-            SetCompteurTrameAudio();
-            if (!ogg->looping) {
-                is_ogg_playing = false;
-            }
+	s16* out = sound_buffer->samples;
+	s32 done = 0;
+	s32 empty_reads = 0;
+	while (done < samples_requested && ogg->decoder) {
+		s32 want = samples_requested - done;
+		if (ogg->samples_left >= 0) want = MIN(want, ogg->samples_left);
+		s32 got = 0;
+		if (want > 0) {
+			got = stb_vorbis_get_samples_short_interleaved(ogg->decoder, 2, out + done * 2, want * 2);
 		}
+		if (ogg->fade_total > 0 && ogg->fade_pos < ogg->fade_total) {
+			for (s32 i = 0; i < got; ++i) {
+				s32 f = MIN(ogg->fade_pos + i, ogg->fade_total);
+				out[(done + i) * 2]     = (s16)((s32)out[(done + i) * 2]     * f / ogg->fade_total);
+				out[(done + i) * 2 + 1] = (s16)((s32)out[(done + i) * 2 + 1] * f / ogg->fade_total);
+			}
+			ogg->fade_pos += got;
+		}
+		if (ogg->samples_left >= 0) ogg->samples_left -= got;
+		done += got;
+		bool segment_ended = (got < want) || ogg->samples_left == 0;
+		if (!segment_ended) continue;
+
+		empty_reads = (got == 0) ? empty_reads + 1 : 0;
+		if (empty_reads >= 2) break; // guard against an empty or broken file
+		if (ogg->ps1) {
+			if (!ps1_music_next_segment()) break; // opens the next track in ogg_cd_track (== *ogg)
+		} else {
+			stb_vorbis_seek_start(ogg->decoder); // loop track (rewind to start)
+			SetCompteurTrameAudio();
+			if (!ogg->looping) {
+				is_ogg_playing = false;
+				break;
+			}
+		}
+	}
+	if (done < samples_requested) {
+		memset(out + done * 2, 0, (samples_requested - done) * sizeof(s16) * 2);
 	}
 }
 
@@ -192,8 +221,16 @@ void game_get_sound_samples(game_sound_buffer_t* output_buffer) {
 
             // 2. Get samples for interpolation
             // Convert 8-bit unsigned samples to a signed range (-128 to 127)
-            s32 s1 = (s32)voice->data[source_index] - 128;
-            s32 s2 = (s32)voice->data[source_index + 1] - 128;
+            s32 s1, s2;
+            if (voice->bytes_per_sample == 2) {
+                // 16-bit signed samples (voice clips from SNDVIG.DAT), scaled to the 8-bit range used below
+                const s16* data16 = (const s16*)voice->data;
+                s1 = data16[source_index] / 256;
+                s2 = data16[source_index + 1] / 256;
+            } else {
+                s1 = (s32)voice->data[source_index] - 128;
+                s2 = (s32)voice->data[source_index + 1] - 128;
+            }
 
             // 3. Perform Linear Interpolation
             // Find the fractional part of our position, which is our interpolation factor 't'
@@ -770,6 +807,14 @@ void PlayTchatchVignette(s32 snd) {
 
 //73204
 void TestCdLoop(void) {
+    if (ps1_music_enabled) {
+        // PS1 soundtrack: start this level's music once; ps1_music.c handles sequencing and looping.
+        if (cdTime == 0) {
+            ps1_play_music(num_world, num_level);
+            cdTime = 1;
+        }
+        return;
+    }
     if (cdTime != 0) {
         if (cdTime != -1) {
             //dos_get_time_of_day();
@@ -803,6 +848,7 @@ void TestCdLoop(void) {
 //73384
 void InitMusic(void) {
     MusicCdActive = 1;
+    ps1_music_init();
     print_once("Not implemented: InitMusic"); //stub
 }
 

@@ -244,13 +244,74 @@ void LoadTchatchPerdu(void) {
 }
 
 //3EDF4
+static s16 tchatch_voice = -1;
+static u8* tchatch_voice_data;
+
 void PlayTchatch(s32 snd, s32 volume) {
-    print_once("Not implemented: PlayTchatch"); //stub
+    // Implemented for the 3DS port (was a stub). Plays a voice clip from SNDVIG.DAT: 16-bit mono at
+    // 11025 Hz. The original mapping from 'snd' to clip isn't documented, so it was reconstructed by
+    // listening to the clips and matching them to where the game asks for them:
+    //   1 Jungle (Tarayzan): "Hey Rayman! Take this magic seed!"          -> clip 8
+    //   2 Mountain (Musician): "Thanks Rayman baby, super helicopter..." -> clip 5
+    //   3 Cave level 3 (Joe): gibberish                                  -> clip 2
+    //   4 Image City: "Uh oh, Mr Dark kidnaps Betilla the Fairy!"        -> clip 0
+    //   6 perfect bonus: "Perfect!"                                      -> clip 7
+    //   7 Candy Chateau (Mr Dark): "You're doomed Rayman, hahaha"         -> clip 1
+    //   8 death                                                          -> clip 6 (preloaded by LoadTchatchPerdu)
+    static const s8 clip_for_snd[9] = { -1, 8, 5, 2, 0, -1, 7, 1, 6 };
+    FreeTchatchVignette();
+    if (snd < 0 || snd >= (s32)COUNT(clip_for_snd) || clip_for_snd[snd] < 0) return;
+    s32 clip = clip_for_snd[snd];
+
+    u8* data = NULL;
+    s32 size = 0;
+    if (clip == 6 && TchachPerduPtr) {
+        data = TchachPerduPtr;
+        size = TchachPerduSize;
+    } else {
+        FILE* fp = open_data_file("SNDVIG.DAT", false);
+        if (!fp) return;
+        archive_header_t* info = sndvig_infos + clip;
+        data = (u8*)malloc(info->size);
+        if (!data) {
+            fclose(fp);
+            return;
+        }
+        fseek(fp, info->offset, SEEK_SET);
+        fread(data, 1, info->size, fp);
+        fclose(fp);
+        if (decode_xor(data, info->size, info->xor_byte, info->checksum_byte) != 0) {
+            free(data);
+            return;
+        }
+        size = info->size;
+        ptrTchatch = data; // freed by FreeTchatchVignette()
+    }
+
+    snd_t voice = {0};
+    voice.data = data;
+    voice.size = size;
+    voice.sample_count = size / 2;
+    voice.bytes_per_sample = 2;
+    voice.sample_rate = 11025;
+    voice.volume = (volume >= 20) ? 1.0f : (float)MAX(volume, 0) / 20.0f; // sound volume option is 0..20
+    tchatch_voice = play_digi_snd(&voice);
+    tchatch_voice_data = data;
 }
 
 //3EFA4
 void FreeTchatchVignette(void) {
-    print_once("Not implemented: FreeTchatchVignette"); //stub
+    // Implemented for the 3DS port (was a stub): stop the voice clip and free its buffer.
+    if (tchatch_voice >= 0) {
+        if (digi_voices[tchatch_voice].data == tchatch_voice_data) { // not reused by another sound since
+            digi_voices[tchatch_voice].is_playing = false;
+        }
+        tchatch_voice = -1;
+    }
+    if (ptrTchatch) {
+        free(ptrTchatch);
+        ptrTchatch = NULL;
+    }
 }
 
 //3EFD4

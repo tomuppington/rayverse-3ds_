@@ -137,6 +137,10 @@ typedef struct ogg_t {
 	mem_t* file;
 	u32 sample_count;
     bool looping;
+    bool ps1;          // PS1 soundtrack: when this track/excerpt ends, run the next PS1 music command
+    s32 samples_left;  // stop after this many samples (-1: play to the end)
+    s32 fade_total;    // fade in over this many samples (0: no fade)
+    s32 fade_pos;
 } ogg_t;
 
 

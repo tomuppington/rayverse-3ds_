@@ -152,3 +152,4 @@ typedef int GLint;
 #include "stoneman.c"
 #include "trumpet.c"
 #include "ufo.c"
+#include "ps1_music.c" // added: PS1 soundtrack support

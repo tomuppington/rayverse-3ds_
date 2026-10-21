@@ -2822,7 +2822,11 @@ void DO_UBI_LOGO(void) {
     current_pal_id = 0;
     LOAD_SCREEN();
     INIT_FADE_IN();
-    play_cd_track(12, false); // CD track 12: Intro music - "Ubisoft Presents"
+    if (ps1_music_enabled) {
+        ps1_play_music(0, 7); // PS1 intro jingle
+    } else {
+        play_cd_track(12, false); // CD track 12: Intro music - "Ubisoft Presents"
+    }
     updateLogo(60, -1, 8);
     FIN_PC();
     stop_cd();

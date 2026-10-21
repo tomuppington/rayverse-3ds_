@@ -2811,7 +2811,7 @@ void DO_MOTEUR2(void) {
                             if (Abs(h_scroll_speed) >= 5 && (xmap < xmapmax - 100))
                             {
                                 set_sub_etat(&ray, 2);
-                                start_cd_gros_rayman(); // change_audio_track_moskito_acc();
+                                if (ps1_music_enabled) ps1_music_moskito(true); else start_cd_gros_rayman(); // change_audio_track_moskito_acc();
                             }
                         }
                         break;
@@ -2819,7 +2819,7 @@ void DO_MOTEUR2(void) {
                         if (Abs(h_scroll_speed) < 5)
                         {
                             set_sub_etat(&ray, 3);
-                            start_cd_gros_rayman(); // change_audio_track_moskito_dec();
+                            if (ps1_music_enabled) ps1_music_moskito(false); else start_cd_gros_rayman(); // change_audio_track_moskito_dec();
                         }
                         break;
                 }

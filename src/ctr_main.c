@@ -159,24 +159,36 @@ void surface_resize(surface_t* surface, int width, int height) {
     surface_clear(surface);
 }
 
-// Display modes (tap the touch screen to cycle):
-//   FILL     - stretch 320x200 to the whole 400x240 screen (x1.25 wide, x1.2 tall: almost uniform)
-//   CRT      - 320x240, the shape the game had on a 4:3 monitor in 1995 (black bars left/right)
-//   PIXEL    - 320x200 at exactly 1:1 pixels (black bars all round)
+// Display modes (tap the touch screen to cycle). The New 3DS / New 3DS XL top screen has a "wide"
+// mode of 800x240 for 2D images (normally used for 3D), giving twice the horizontal resolution. That
+// lets the 320-pixel-wide game be scaled much more sharply - and by an exact 2x in two of the modes.
+//   0 FILL_WIDE  - whole screen, 800x240 wide mode (x2.5 wide, x1.2 tall)            [default]
+//   1 CRT_WIDE   - 640x240 wide mode: the 4:3 shape of a 1995 monitor, exactly x2 wide
+//   2 PIXEL_WIDE - 640x200 wide mode: exactly x2 wide, x1 tall - perfectly even pixels, smaller
+//   3 FILL_400   - whole screen at the normal 400x240 resolution (the previous default)
 // Scaling uses area-weighted sampling: each screen pixel takes the colours of the game pixels it
-// covers, in proportion. Pixels stay sharp; only their edges get blended, which avoids the uneven
-// "every fourth column doubled" look (and shimmering while scrolling) of plain pixel-repeating.
-enum { CTR_DISPLAY_FILL, CTR_DISPLAY_CRT, CTR_DISPLAY_PIXEL, CTR_DISPLAY_MODE_COUNT };
-static const char* ctr_display_mode_names[CTR_DISPLAY_MODE_COUNT] = {
-    "Fill screen (400x240)", "Original 4:3 shape (320x240)", "Pixel perfect (320x200)",
+// covers, in proportion. Pixels stay sharp; only the screen pixels that straddle two game pixels get
+// blended, which avoids the uneven, shimmering look of plain pixel-repeating at non-whole scales.
+enum { CTR_DISPLAY_FILL_WIDE, CTR_DISPLAY_CRT_WIDE, CTR_DISPLAY_PIXEL_WIDE, CTR_DISPLAY_FILL_400, CTR_DISPLAY_MODE_COUNT };
+typedef struct ctr_display_mode_t {
+    const char* name;
+    bool wide;
+    s16 out_w, out_h; // in framebuffer pixels
+} ctr_display_mode_t;
+static const ctr_display_mode_t ctr_display_modes[CTR_DISPLAY_MODE_COUNT] = {
+    { "Fill screen, sharp (800x240)",   true,  800, 240 },
+    { "Original 4:3 shape (640x240)",   true,  640, 240 },
+    { "Pixel perfect (640x200)",        true,  640, 200 },
+    { "Fill screen, standard (400x240)", false, 400, 240 },
 };
-static s32 ctr_display_mode = CTR_DISPLAY_FILL;
+static s32 ctr_display_mode = CTR_DISPLAY_FILL_WIDE;
+static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 in wide mode)
 
 typedef struct ctr_scale_axis_t {
     s32 out_size;
     s32 src_size;
-    s16 src_index[CTR_TOP_W];   // first source pixel covered by each output pixel
-    u16 weight[CTR_TOP_W];      // share (0..256) of that first source pixel; the rest is the next one
+    s16 src_index[800];   // first source pixel covered by each output pixel
+    u16 weight[800];      // share (0..256) of that first source pixel; the rest is the next one
 } ctr_scale_axis_t;
 
 static ctr_scale_axis_t ctr_axis_x, ctr_axis_y;
@@ -200,16 +212,13 @@ static void ctr_build_axis(ctr_scale_axis_t* axis, s32 src_size, s32 out_size) {
 }
 
 static void ctr_setup_display_mode(s32 src_w, s32 src_h) {
-    s32 out_w = src_w, out_h = src_h;
-    if (ctr_display_mode == CTR_DISPLAY_FILL) {
-        out_w = CTR_TOP_W; out_h = CTR_TOP_H;
-    } else if (ctr_display_mode == CTR_DISPLAY_CRT) {
-        out_w = src_w; out_h = CTR_TOP_H; // 320x200 shown as 4:3, like a 1995 CRT monitor
+    const ctr_display_mode_t* mode = &ctr_display_modes[ctr_display_mode];
+    if (gfxIsWide() != mode->wide) {
+        gfxSetWide(mode->wide);
     }
-    out_w = MIN(out_w, CTR_TOP_W);
-    out_h = MIN(out_h, CTR_TOP_H);
-    ctr_build_axis(&ctr_axis_x, src_w, out_w);
-    ctr_build_axis(&ctr_axis_y, src_h, out_h);
+    ctr_fb_w = mode->wide ? 800 : CTR_TOP_W;
+    ctr_build_axis(&ctr_axis_x, src_w, MIN(mode->out_w, ctr_fb_w));
+    ctr_build_axis(&ctr_axis_y, src_h, MIN(mode->out_h, CTR_TOP_H));
 }
 
 static inline u32 ctr_blend(u32 c0, u32 c1, u32 w0) {
@@ -224,10 +233,10 @@ static inline u32 ctr_blend(u32 c0, u32 c1, u32 w0) {
 static void ctr_cycle_display_mode(void) {
     ctr_display_mode = (ctr_display_mode + 1) % CTR_DISPLAY_MODE_COUNT;
     ctr_axis_x.out_size = 0; // force rebuild
-    printf("Display: %s\n", ctr_display_mode_names[ctr_display_mode]);
+    printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
 }
 
-// Copy the game's 320x200, 256-colour picture to the 400x240 top screen, scaling it on the way.
+// Copy the game's 320x200, 256-colour picture to the top screen, scaling it on the way.
 // The 3DS framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
 static void ctr_present(app_state_t* app_state) {
     game_state_t* game = &app_state->game;
@@ -250,10 +259,10 @@ static void ctr_present(app_state_t* app_state) {
     u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
     s32 w = ctr_axis_x.out_size;
     s32 h = ctr_axis_y.out_size;
-    if (w < CTR_TOP_W || h < CTR_TOP_H) {
-        memset(fb, 0, CTR_TOP_W * CTR_TOP_H * 3);
+    if (w < ctr_fb_w || h < CTR_TOP_H) {
+        memset(fb, 0, ctr_fb_w * CTR_TOP_H * 3);
     }
-    s32 ox = (CTR_TOP_W - w) / 2;
+    s32 ox = (ctr_fb_w - w) / 2;
     s32 oy = (CTR_TOP_H - h) / 2;
     s32 last_x = src_w - 1;
     s32 last_y = src_h - 1;

@@ -12,6 +12,12 @@ void linux_prepare_frame(app_state_t* app_state);
 void linux_end_frame(app_state_t* app_state);
 #endif
 void message_box(const char* message);
+// ps1_music.c
+extern bool ps1_music_enabled;
+void ps1_music_init(void);
+void ps1_play_music(s16 world, s16 level);
+bool ps1_music_next_segment(void);
+void ps1_music_moskito(bool accelerate);
 
 // lowlevel.c
 void display_emptypicture(void);

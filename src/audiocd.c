@@ -21,22 +21,32 @@ void start_cd_ubi_soft(void) {
 
 //optimized out
 void start_cd_gagne(void) {
-    //nullsub
+    //nullsub (PC). PS1 soundtrack: level-complete fanfare.
+    if (ps1_music_enabled) ps1_play_music(0, 0);
 }
 
 //optimized out
 void start_cd_suspence(void) {
-    //nullsub
+    //nullsub (PC)
+    if (ps1_music_enabled) ps1_play_music(0, 6);
 }
 
 //1CF7C
 void start_cd_gros_rayman(void) {
+    if (ps1_music_enabled) {
+        ps1_play_music(0, 9);
+        return;
+    }
     //play_cd_track(19); // Menu music - "World Map"
     // TODO: remove this once DoCdRap() is implemented (I think that loops the menu music)
 }
 
 //1CF80
 void start_cd_perdu(void) {
+    if (ps1_music_enabled) {
+        ps1_play_music(0, 1); // PS1: death music
+        return;
+    }
     if (CarteSonAutorisee) {
         PlayTchatchVignette(8);
     } else {
@@ -62,13 +72,18 @@ void start_cd_bbdead(void) {
         MusicCdActive = 0;
     }
     if (MusicCdActive) {
-        play_cd_track(19, true); // Menu music - "World Map"
+        if (ps1_music_enabled) {
+            ps1_play_music(0, 3); // PS1: world map music
+        } else {
+            play_cd_track(19, true); // Menu music - "World Map"
+        }
     }
 }
 
 //1CFFC
 void start_cd_gameover(void) {
-    //nullsub
+    //nullsub (PC)
+    if (ps1_music_enabled) ps1_play_music(0, 2);
 }
 
 //1D028
