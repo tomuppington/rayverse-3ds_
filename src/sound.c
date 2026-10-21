@@ -15,23 +15,27 @@ u8 snd_sqrt_table[128] = {
 ogg_t open_cd_vorbis(s32 track_number, bool looping) {
 	ogg_t result = {0};
 	if (track_number >= 2 && track_number <= 20) {
+		// Changed (3DS port): stream the track from disk instead of reading the whole file (up to
+		// several MB) into memory first. On the 3DS, loading a whole track from the SD card froze the
+		// game for a noticeable moment every time the music changed.
 		char filename[512];
 		snprintf(filename, sizeof(filename), "Music/rayman%02d.ogg", track_number);
-		mem_t* mem = read_entire_file(filename, false);
-		if (!mem) {
+		FILE* fp = fopen(filename, "rb");
+		if (!fp) {
 			// Try to find a Music directory one level up (for GOG Rayman Forever version)
 			snprintf(filename, sizeof(filename), "../Music/rayman%02d.ogg", track_number);
-			mem = read_entire_file(filename, false);
+			fp = fopen(filename, "rb");
 		}
-		if (mem) {
+		if (fp) {
+			setvbuf(fp, NULL, _IOFBF, 32 * 1024); // read in 32 KB chunks (~2 seconds of music each)
 			int error = 0;
-			stb_vorbis* decoder = stb_vorbis_open_memory(mem->data, mem->len, &error, NULL);
+			stb_vorbis* decoder = stb_vorbis_open_file(fp, 1 /* close the file when done */, &error, NULL);
 			if (!decoder) {
-				free(mem);
+				fclose(fp);
 				return result; // TODO: failure condition
 			} else {
 				result.decoder = decoder;
-				result.file = mem;
+				result.file = NULL;
 				result.sample_count = stb_vorbis_stream_length_in_samples(decoder);
                 result.looping = looping;
 				return result;
