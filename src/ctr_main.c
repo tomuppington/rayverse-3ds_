@@ -88,7 +88,6 @@ static const ctr_keymap_t ctr_keymap[] = {
     { KEY_A,      SC_ENTER },    // confirm in menus
     { KEY_START,  SC_ESCAPE },   // game menu / back
     { KEY_SELECT, SC_NUMLOCK },  // pause
-    // L / R: crawl (handled in ctr_process_input). The PC 'Tab' key R used to send is unused by the game.
 };
 
 static bool ctr_key_was_down[COUNT(ctr_keymap)];
@@ -101,15 +100,15 @@ static void ctr_process_input(void) {
     }
     u32 held = hidKeysHeld();
 
-    // Crawl shortcut: holding L or R does what the PC version needs for crawling - hold Down, then
-    // press Jump. Jump is added two frames after Down (so Rayman crouches first instead of jumping),
-    // and only while Rayman is on the ground (main_etat 0 = standing, 1 = moving), so pressing a
-    // shoulder button in mid-air doesn't trigger the helicopter.
+    // Crawling: Down + Left/Right. The PC version only crawls while Jump is also held (Down, Jump,
+    // then a direction), which isn't how the console versions play. So while Down and a direction
+    // are both held and Rayman is on the ground (main_etat 0 = standing, 1 = moving), we add the
+    // Jump press for the player, two frames after Down so that Rayman crouches first rather than
+    // jumping. In the air nothing is added, so this can't trigger the helicopter.
     static s32 crawl_frames;
     u32 effective = held;
-    if (held & (KEY_L | KEY_R)) {
+    if ((held & KEY_DOWN) && (held & (KEY_LEFT | KEY_RIGHT)) && !(held & KEY_UP)) {
         ++crawl_frames;
-        effective |= KEY_DDOWN;
         if (crawl_frames > 2 && (ray.main_etat == 0 || ray.main_etat == 1)) {
             effective |= KEY_B;
         }
@@ -366,7 +365,7 @@ int main(int argc, char** argv) {
 
     printf("Rayverse for 3DS (work in progress)\n");
     printf("Rayman 1 PC port - bring your own data\n\n");
-    printf("Controls: B jump, Y punch, X action,\nL/R crawl, A confirm, START menu,\nSELECT pause.\n");
+    printf("Controls: B jump, Y punch, X action,\nDown+Left/Right crawl, A confirm,\nSTART menu, SELECT pause.\n");
     printf("Hold L+R+SELECT to quit.\n");
     printf("Tap the touch screen to change the\npicture size.\n\n");
 
