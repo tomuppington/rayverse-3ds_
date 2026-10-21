@@ -1,0 +1,94 @@
+/*
+void win32_print_current_directory() {
+	char buffer[2048];
+	if (GetCurrentDirectory(sizeof(buffer), buffer)) {
+		printf("%s\n", buffer);
+	}
+}
+*/
+
+image_t create_palettized_image(s32 width, s32 height) {
+	image_t result = {0};
+	memset(&result, 0, sizeof(result));
+	result.width = width;
+	result.height = height;
+	result.memory_size = width * height;
+	result.memory = (u8*) calloc(1, result.memory_size);
+	result.pal = (rgb_palette_t*) calloc(1, sizeof(rgb_palette_t));
+	result.pal_needs_free = true;
+	return result;
+}
+
+void destroy_image(image_t* image) {
+	if (image->memory) {
+		free(image->memory);
+		image->memory = NULL;
+	}
+	if (image->pal_needs_free && image->pal) {
+		free(image->pal);
+		image->pal = NULL;
+	}
+}
+
+void game_init_sound(game_sound_buffer_t* sound, s32 samples_per_second) {
+	// Prepare a sound buffer for the game code to write into.
+	sound->samples_per_second = samples_per_second;
+	sound->samples = (s16*)calloc(1, sound->samples_per_second * 2 * sizeof(s16));
+}
+
+void game_init(game_state_t* game) {
+	CarteSonAutorisee = 1;
+	game->draw_buffer = create_palettized_image(320, 200);
+	game->prev_frame = create_palettized_image(320, 200);
+	game->initialized = true;
+	global_game = game;
+}
+
+void advance_frame(void) {
+	// Since we don't have a display buffer we have a separate buffer for the debug boxes/lines which we overlay
+	if (debug_show_obj_collision || debug_show_mini_map) {
+		for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+			if (debug_overlay_draw_buffer[i]) {
+				draw_buffer[i] = debug_overlay_draw_buffer[i];
+			}
+		}
+		memset(debug_overlay_draw_buffer, 0, SCREEN_WIDTH * SCREEN_HEIGHT);
+	}
+    
+	app_state_t* app_state = &global_app_state;
+	game_state_t* game = &app_state->game;
+	rgb_t clear_color = { 0, 0, 0 };
+	render_clear(app_state->active_surface, clear_color);
+    memcpy(game->prev_frame.memory, game->draw_buffer.memory, game->draw_buffer.memory_size);
+
+    // The draw buffer memory source may sometimes be overridden by EffetBufferNormal (we need to allow this).
+    u8* saved_memory = game->draw_buffer.memory;
+    if (draw_buffer && draw_buffer != game->draw_buffer.memory) {
+        game->draw_buffer.memory = draw_buffer;
+    }
+
+    surface_blit_palettized_image(&game->draw_buffer, &game->draw_palette, NULL, app_state->active_surface, NULL);
+
+    game->draw_buffer.memory = saved_memory;
+
+#if _WIN32
+	win32_advance_frame(app_state);
+#elif defined(__3DS__)
+    ctr_advance_frame(app_state);
+#else
+    linux_advance_frame(app_state);
+#endif
+
+    if (global_app_state.was_client_leftclicked) {
+        debug_clicked = true;
+        debug_click_x = ((float)global_app_state.click_x / (float)global_app_state.client_width) * (float)game->draw_buffer.width;
+        debug_click_y = ((float)global_app_state.click_y / (float)global_app_state.client_height) * (float)game->draw_buffer.height;
+        debug_click_obj_dist_sq = 1e9f;
+        printf("debug click: x = %f, y=%f\n", debug_click_x, debug_click_y);
+    } else {
+        debug_clicked = false;
+    }
+
+}
+
+
