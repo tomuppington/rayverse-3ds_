@@ -88,7 +88,7 @@ static const ctr_keymap_t ctr_keymap[] = {
     { KEY_A,      SC_ENTER },    // confirm in menus
     { KEY_START,  SC_ESCAPE },   // game menu / back
     { KEY_SELECT, SC_NUMLOCK },  // pause
-    { KEY_R,      SC_TAB },      // cancel
+    // L / R: crawl (handled in ctr_process_input). The PC 'Tab' key R used to send is unused by the game.
 };
 
 static bool ctr_key_was_down[COUNT(ctr_keymap)];
@@ -100,8 +100,25 @@ static void ctr_process_input(void) {
         ctr_cycle_display_mode(); // tap the touch screen to change how the picture fills the screen
     }
     u32 held = hidKeysHeld();
+
+    // Crawl shortcut: holding L or R does what the PC version needs for crawling - hold Down, then
+    // press Jump. Jump is added two frames after Down (so Rayman crouches first instead of jumping),
+    // and only while Rayman is on the ground (main_etat 0 = standing, 1 = moving), so pressing a
+    // shoulder button in mid-air doesn't trigger the helicopter.
+    static s32 crawl_frames;
+    u32 effective = held;
+    if (held & (KEY_L | KEY_R)) {
+        ++crawl_frames;
+        effective |= KEY_DDOWN;
+        if (crawl_frames > 2 && (ray.main_etat == 0 || ray.main_etat == 1)) {
+            effective |= KEY_B;
+        }
+    } else {
+        crawl_frames = 0;
+    }
+
     for (u32 i = 0; i < COUNT(ctr_keymap); ++i) {
-        bool is_down = (held & ctr_keymap[i].buttons) != 0;
+        bool is_down = (effective & ctr_keymap[i].buttons) != 0;
         if (is_down != ctr_key_was_down[i]) {
             ctr_key_was_down[i] = is_down;
             u8 dos_scancode = ctr_keymap[i].scancode;
@@ -211,12 +228,26 @@ static void ctr_cycle_display_mode(void) {
     printf("Display: %s\n", ctr_display_mode_names[ctr_display_mode]);
 }
 
-// Copy the game's picture (32-bit, bytes B,G,R,A) to the 400x240 top screen. The 3DS
-// framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
-static void ctr_present(surface_t* surface) {
-    if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != surface->width || ctr_axis_y.src_size != surface->height) {
-        ctr_setup_display_mode(surface->width, surface->height);
+// Copy the game's 320x200, 256-colour picture to the 400x240 top screen, scaling it on the way.
+// The 3DS framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
+static void ctr_present(app_state_t* app_state) {
+    game_state_t* game = &app_state->game;
+    image_t* image = &game->draw_buffer;
+    // The game sometimes points draw_buffer at a different buffer (effects); honour that, as engine.c does.
+    const u8* src = (draw_buffer && draw_buffer != image->memory) ? draw_buffer : image->memory;
+    s32 src_w = image->width, src_h = image->height;
+
+    if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h) {
+        ctr_setup_display_mode(src_w, src_h);
     }
+
+    // This frame's palette as packed B,G,R pixels.
+    static u32 pal[256];
+    for (s32 i = 0; i < 256; ++i) {
+        rgb_t c = game->draw_palette.colors[i];
+        pal[i] = (u32)c.b | ((u32)c.g << 8) | ((u32)c.r << 16);
+    }
+
     u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
     s32 w = ctr_axis_x.out_size;
     s32 h = ctr_axis_y.out_size;
@@ -225,10 +256,8 @@ static void ctr_present(surface_t* surface) {
     }
     s32 ox = (CTR_TOP_W - w) / 2;
     s32 oy = (CTR_TOP_H - h) / 2;
-    s32 last_x = surface->width - 1;
-    s32 last_y = surface->height - 1;
-    s32 pitch_px = surface->pitch / 4;
-    const u32* pixels = (const u32*)surface->memory;
+    s32 last_x = src_w - 1;
+    s32 last_y = src_h - 1;
 
     for (s32 x = 0; x < w; ++x) {
         s32 sx0 = ctr_axis_x.src_index[x];
@@ -238,11 +267,12 @@ static void ctr_present(surface_t* surface) {
         for (s32 y = 0; y < h; ++y) {
             s32 sy0 = ctr_axis_y.src_index[y];
             u32 wy = ctr_axis_y.weight[y];
-            const u32* row0 = pixels + sy0 * pitch_px;
-            u32 c = ctr_blend(row0[sx0], row0[sx1], wx);
+            const u8* row0 = src + sy0 * src_w;
+            u32 c = (wx >= 256) ? pal[row0[sx0]] : ctr_blend(pal[row0[sx0]], pal[row0[sx1]], wx);
             if (wy < 256) {
-                const u32* row1 = pixels + MIN(sy0 + 1, last_y) * pitch_px;
-                c = ctr_blend(c, ctr_blend(row1[sx0], row1[sx1], wx), wy);
+                const u8* row1 = src + MIN(sy0 + 1, last_y) * src_w;
+                u32 c1 = (wx >= 256) ? pal[row1[sx0]] : ctr_blend(pal[row1[sx0]], pal[row1[sx1]], wx);
+                c = ctr_blend(c, c1, wy);
             }
             dest[0] = (u8)(c);       // blue
             dest[1] = (u8)(c >> 8);  // green
@@ -264,11 +294,33 @@ void ctr_advance_frame(app_state_t* app_state) {
     }
 
     ctr_process_input();
-    ctr_present(app_state->active_surface);
+    ctr_present(app_state);
     ctr_produce_sound_for_frame(app_state, &app_state->game.sound_buffer);
 
     gfxFlushBuffers();
     gfxSwapBuffers();
+
+    // Speed readout on the bottom screen, updated once a second: frames per second, how much of
+    // each frame's time budget the console is using, and how often the sound queue ran dry.
+    static s64 busy_ns_total, stats_start;
+    static s32 stats_frames;
+    static u32 underruns_at_start;
+    s64 before_wait = get_clock();
+    busy_ns_total += before_wait - app_state->flip_clock;
+    ++stats_frames;
+    if (stats_start == 0) stats_start = before_wait;
+    if (before_wait - stats_start >= 1000000000ll) {
+        float seconds = (float)(before_wait - stats_start) / 1e9f;
+        s32 fps = (s32)((float)stats_frames / seconds + 0.5f);
+        s32 load = (s32)(100.0f * (float)busy_ns_total / (float)(before_wait - stats_start) + 0.5f);
+        printf("\x1b[29;0HSpeed: %2d fps  CPU: %3d%%  sound gaps: %lu   ", fps, load,
+               (unsigned long)(ctr_snd_underruns - underruns_at_start));
+        busy_ns_total = 0;
+        stats_frames = 0;
+        stats_start = before_wait;
+        underruns_at_start = ctr_snd_underruns;
+    }
+
     gspWaitForVBlank(); // ~59.8 frames per second, close to the game's 60
 
     app_state->flip_clock = get_clock();
@@ -314,7 +366,7 @@ int main(int argc, char** argv) {
 
     printf("Rayverse for 3DS (work in progress)\n");
     printf("Rayman 1 PC port - bring your own data\n\n");
-    printf("Controls: B jump, Y punch, X action,\nA confirm, START menu, SELECT pause.\n");
+    printf("Controls: B jump, Y punch, X action,\nL/R crawl, A confirm, START menu,\nSELECT pause.\n");
     printf("Hold L+R+SELECT to quit.\n");
     printf("Tap the touch screen to change the\npicture size.\n\n");
 

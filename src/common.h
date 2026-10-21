@@ -62,7 +62,7 @@ typedef long long s64;
 #define PATH_SEP "/"
 #endif
 
-#ifdef __3DS__
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
 void ctr_fatal_error(void);
 static inline void fatal_error(void) {
 	ctr_fatal_error();

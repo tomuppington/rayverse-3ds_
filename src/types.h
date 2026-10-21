@@ -68,6 +68,8 @@ typedef struct snd_t {
     s32 size;
     s32 sample_count;
     s32 bnk_field_C;
+    s32 loop_start; // sample loop points from the sound bank (loop_end == 0: no loop)
+    s32 loop_end;
     float position;
     float volume;
     s32 sample_rate;
@@ -111,7 +113,7 @@ typedef struct win32_sound_output_t {
 	IDirectSoundBuffer* secondary_buffer;
 	bool is_valid;
 } win32_sound_output_t;
-#elif defined(__3DS__)
+#elif defined(__3DS__) || defined(RAYVERSE_HEADLESS)
 typedef struct ctr_sound_output_t {
     u32 samples_per_second;
     u32 bytes_per_sample;
@@ -147,7 +149,7 @@ typedef struct win32_state_t {
     HCURSOR cursor;
     win32_sound_output_t sound_output;
 } win32_state_t;
-#elif defined(__3DS__)
+#elif defined(__3DS__) || defined(RAYVERSE_HEADLESS)
 typedef struct ctr_state_t {
     ctr_sound_output_t sound_output;
 } ctr_state_t;
@@ -178,7 +180,7 @@ typedef struct surface_t {
 typedef struct app_state_t {
 #ifdef _WIN32
 	win32_state_t win32;
-#elif defined(__3DS__)
+#elif defined(__3DS__) || defined(RAYVERSE_HEADLESS)
     ctr_state_t ctr;
 #else
     sdl_state_t sdl;

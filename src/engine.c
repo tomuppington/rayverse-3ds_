@@ -57,9 +57,15 @@ void advance_frame(void) {
     
 	app_state_t* app_state = &global_app_state;
 	game_state_t* game = &app_state->game;
+    memcpy(game->prev_frame.memory, game->draw_buffer.memory, game->draw_buffer.memory_size);
+#ifdef __3DS__
+    // 3DS: skip the full-colour conversion; ctr_present() scales straight from the 256-colour
+    // draw buffer and palette, saving two passes over the whole picture every frame.
+    ctr_advance_frame(app_state);
+    return;
+#endif
 	rgb_t clear_color = { 0, 0, 0 };
 	render_clear(app_state->active_surface, clear_color);
-    memcpy(game->prev_frame.memory, game->draw_buffer.memory, game->draw_buffer.memory_size);
 
     // The draw buffer memory source may sometimes be overridden by EffetBufferNormal (we need to allow this).
     u8* saved_memory = game->draw_buffer.memory;
@@ -73,7 +79,7 @@ void advance_frame(void) {
 
 #if _WIN32
 	win32_advance_frame(app_state);
-#elif defined(__3DS__)
+#elif defined(__3DS__) || defined(RAYVERSE_HEADLESS)
     ctr_advance_frame(app_state);
 #else
     linux_advance_frame(app_state);

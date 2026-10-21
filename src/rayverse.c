@@ -6,6 +6,13 @@
 #include <dsound.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
+#elif defined(RAYVERSE_HEADLESS)
+// Headless test build (no window, scripted input) used for automated testing on a PC
+#include <alloca.h>
+#include <strings.h>
+#include <unistd.h>
+typedef unsigned int GLuint;
+typedef int GLint;
 #elif defined(__3DS__)
 // Headers specific to Nintendo 3DS (libctru)
 #include <3ds.h>
@@ -68,6 +75,8 @@ typedef int GLint;
 #include "win32_opengl.c"
 #include "win32_sound.c"
 #include "win32_main.c"
+#elif defined(RAYVERSE_HEADLESS)
+#include "headless_main.c"
 #elif defined(__3DS__)
 // Source files specific to Nintendo 3DS
 #include "ctr_sound.c"

@@ -174,6 +174,13 @@ void game_get_sound_samples(game_sound_buffer_t* output_buffer) {
 
             // Stop if we've read past the end of the source data.
             // We need source_index and source_index + 1 for interpolation, so we check against size - 1.
+            if (voice->loop_end > 0 && source_index >= voice->loop_end - 1) {
+                // Looping sample (e.g. Rayman's fist wind-up): jump back to the loop start. It keeps
+                // playing until the game stops it with KeyOff().
+                voice->position -= (float)(voice->loop_end - voice->loop_start);
+                if (voice->position < 0.0f) voice->position = 0.0f;
+                source_index = (s32)voice->position;
+            }
             if (source_index >= voice->sample_count - 1) {
                 voice->is_playing = false;
                 break; // Stop processing this voice for this frame
@@ -347,6 +354,7 @@ s32 get_voice_obj(s32 obj_id) {
     if (voice_table[0].obj != obj_id) {
         do {
             ++index;
+            cur_voice = voice_table + index; // fix: the pointer was never advanced
         } while (index < COUNT(voice_table) && cur_voice->obj != obj_id);
     }
     if (index == COUNT(voice_table)) {
@@ -364,6 +372,7 @@ s32 get_voice_snd(s32 snd) {
     if (voice_table[0].snd != snd) {
         do {
             ++index;
+            cur_voice = voice_table + index; // fix: the pointer was never advanced
         } while (index < COUNT(voice_table) && cur_voice->snd != snd);
     }
     if (index == COUNT(voice_table)) {
@@ -380,7 +389,7 @@ s32 get_voice_obj_snd(s16 obj_id, s16 snd) {
     s32 index = 0;
     // NOTE: there is a conditional here, but the branches are identical?
     // if (snd = 48) { ... } else { ... }
-    while ((voice->snd != snd || voice->obj != obj_id) && index < COUNT(voice_table)) {
+    while (index < COUNT(voice_table) && (voice->snd != snd || voice->obj != obj_id)) {
         ++index;
         ++voice;
     }
@@ -430,6 +439,7 @@ void erase_voice_table(s32 obj_id) {
     if (voice_table[0].obj != obj_id) {
         do {
             ++result;
+            cur_voice = voice_table + result; // fix: the pointer was never advanced
         } while (result < COUNT(voice_table) && cur_voice->obj != obj_id);
     }
     if (result != COUNT(voice_table)) {

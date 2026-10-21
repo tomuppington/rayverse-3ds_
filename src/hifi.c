@@ -163,6 +163,20 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
         sample_rate = (s32)((float)sample_rate * powf(2.0f, ((float)note - base_note) / 12.0f));
     }
 
+    // Fix (3DS port): a KeyOn with volume 0 used to start a silent voice and take over the voice-table
+    // slot of the sound already playing for that object, orphaning it. PlaySnd() requests volume 0
+    // when the same sound is already playing (e.g. it is called repeatedly while Rayman charges his
+    // fist); with looping sounds the orphaned voice would never be stopped. Starting nothing instead
+    // keeps the original voice tracked, and is otherwise inaudible either way.
+    if (volume == 0) {
+        return -1;
+    }
+    bnk_header_t* loop_header = (bank == 1) ? bnkHeaderWorld + prog : bnkHeaderFixe + prog;
+    // field_8 / field_C of the bank header are the loop start / end (0, 0 for one-shot samples).
+    if (loop_header->field_C > loop_header->field_8 && loop_header->field_C <= loop_header->size) {
+        snd.loop_start = loop_header->field_8;
+        snd.loop_end = loop_header->field_C;
+    }
     if (bank == 1) {
         bnk_header_t* bnk_header = bnkHeaderWorld + prog;
         snd.data = bnkDataWorld + bnk_header->offset;

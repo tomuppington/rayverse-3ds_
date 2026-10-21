@@ -4,7 +4,7 @@
 void win32_advance_frame(app_state_t* app_state);
 void win32_prepare_frame(app_state_t* app_state);
 void win32_end_frame(app_state_t* app_state);
-#elif defined(__3DS__)
+#elif defined(__3DS__) || defined(RAYVERSE_HEADLESS)
 void ctr_advance_frame(app_state_t* app_state);
 #else
 void linux_advance_frame(app_state_t* app_state);
