@@ -872,6 +872,13 @@ void DO_COMMANDE_OPTIONS(void) {
         sortie_options = 1;
         byte_96883 = 1;
     } else if (position == 4 && ValidButPressed()) {
+#ifdef __3DS__
+        // 3DS: the 'graphics details' screen is not implemented in Rayverse yet (all its functions are
+        // stubs), and entering it locks up the game. Its settings only concern PC graphics hardware,
+        // so on the 3DS we simply ignore this menu entry.
+        TestButtonReleased();
+        return;
+#endif
         byte_E4CD8 = options.music_enabled;
         byte_E4CD9 = options.sound_volume;
         menuEtape = 9; // go to graphics details

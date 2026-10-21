@@ -92,9 +92,13 @@ static const ctr_keymap_t ctr_keymap[] = {
 };
 
 static bool ctr_key_was_down[COUNT(ctr_keymap)];
+static void ctr_cycle_display_mode(void);
 
 static void ctr_process_input(void) {
     hidScanInput();
+    if (hidKeysDown() & KEY_TOUCH) {
+        ctr_cycle_display_mode(); // tap the touch screen to change how the picture fills the screen
+    }
     u32 held = hidKeysHeld();
     for (u32 i = 0; i < COUNT(ctr_keymap); ++i) {
         bool is_down = (held & ctr_keymap[i].buttons) != 0;
@@ -139,26 +143,111 @@ void surface_resize(surface_t* surface, int width, int height) {
     surface_clear(surface);
 }
 
-// Copy the game's 320x200 picture (32-bit, bytes B,G,R,A) to the centre of the 400x240 top
-// screen. The 3DS framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
-static void ctr_present(surface_t* surface) {
-    u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
-    memset(fb, 0, CTR_TOP_W * CTR_TOP_H * 3);
+// Display modes (tap the touch screen to cycle):
+//   FILL     - stretch 320x200 to the whole 400x240 screen (x1.25 wide, x1.2 tall: almost uniform)
+//   CRT      - 320x240, the shape the game had on a 4:3 monitor in 1995 (black bars left/right)
+//   PIXEL    - 320x200 at exactly 1:1 pixels (black bars all round)
+// Scaling uses area-weighted sampling: each screen pixel takes the colours of the game pixels it
+// covers, in proportion. Pixels stay sharp; only their edges get blended, which avoids the uneven
+// "every fourth column doubled" look (and shimmering while scrolling) of plain pixel-repeating.
+enum { CTR_DISPLAY_FILL, CTR_DISPLAY_CRT, CTR_DISPLAY_PIXEL, CTR_DISPLAY_MODE_COUNT };
+static const char* ctr_display_mode_names[CTR_DISPLAY_MODE_COUNT] = {
+    "Fill screen (400x240)", "Original 4:3 shape (320x240)", "Pixel perfect (320x200)",
+};
+static s32 ctr_display_mode = CTR_DISPLAY_FILL;
 
-    s32 w = MIN(surface->width, CTR_TOP_W);
-    s32 h = MIN(surface->height, CTR_TOP_H);
+typedef struct ctr_scale_axis_t {
+    s32 out_size;
+    s32 src_size;
+    s16 src_index[CTR_TOP_W];   // first source pixel covered by each output pixel
+    u16 weight[CTR_TOP_W];      // share (0..256) of that first source pixel; the rest is the next one
+} ctr_scale_axis_t;
+
+static ctr_scale_axis_t ctr_axis_x, ctr_axis_y;
+
+static void ctr_build_axis(ctr_scale_axis_t* axis, s32 src_size, s32 out_size) {
+    axis->out_size = out_size;
+    axis->src_size = src_size;
+    for (s32 i = 0; i < out_size; ++i) {
+        // Output pixel i covers source interval [a, b), measured in units of 1/out_size source pixels.
+        s32 a = i * src_size;
+        s32 b = a + src_size;
+        s32 first = a / out_size;
+        s32 first_end = (first + 1) * out_size;
+        u16 weight = 256;
+        if (b > first_end) {
+            weight = (u16)(((first_end - a) * 256 + src_size / 2) / src_size);
+        }
+        axis->src_index[i] = (s16)first;
+        axis->weight[i] = weight;
+    }
+}
+
+static void ctr_setup_display_mode(s32 src_w, s32 src_h) {
+    s32 out_w = src_w, out_h = src_h;
+    if (ctr_display_mode == CTR_DISPLAY_FILL) {
+        out_w = CTR_TOP_W; out_h = CTR_TOP_H;
+    } else if (ctr_display_mode == CTR_DISPLAY_CRT) {
+        out_w = src_w; out_h = CTR_TOP_H; // 320x200 shown as 4:3, like a 1995 CRT monitor
+    }
+    out_w = MIN(out_w, CTR_TOP_W);
+    out_h = MIN(out_h, CTR_TOP_H);
+    ctr_build_axis(&ctr_axis_x, src_w, out_w);
+    ctr_build_axis(&ctr_axis_y, src_h, out_h);
+}
+
+static inline u32 ctr_blend(u32 c0, u32 c1, u32 w0) {
+    // Blend two B,G,R,A pixels; w0 = share of c0 out of 256.
+    if (w0 >= 256) return c0;
+    u32 w1 = 256 - w0;
+    u32 rb = (((c0 & 0x00FF00FF) * w0 + (c1 & 0x00FF00FF) * w1) >> 8) & 0x00FF00FF;
+    u32 g  = (((c0 & 0x0000FF00) * w0 + (c1 & 0x0000FF00) * w1) >> 8) & 0x0000FF00;
+    return rb | g;
+}
+
+static void ctr_cycle_display_mode(void) {
+    ctr_display_mode = (ctr_display_mode + 1) % CTR_DISPLAY_MODE_COUNT;
+    ctr_axis_x.out_size = 0; // force rebuild
+    printf("Display: %s\n", ctr_display_mode_names[ctr_display_mode]);
+}
+
+// Copy the game's picture (32-bit, bytes B,G,R,A) to the 400x240 top screen. The 3DS
+// framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
+static void ctr_present(surface_t* surface) {
+    if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != surface->width || ctr_axis_y.src_size != surface->height) {
+        ctr_setup_display_mode(surface->width, surface->height);
+    }
+    u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
+    s32 w = ctr_axis_x.out_size;
+    s32 h = ctr_axis_y.out_size;
+    if (w < CTR_TOP_W || h < CTR_TOP_H) {
+        memset(fb, 0, CTR_TOP_W * CTR_TOP_H * 3);
+    }
     s32 ox = (CTR_TOP_W - w) / 2;
     s32 oy = (CTR_TOP_H - h) / 2;
+    s32 last_x = surface->width - 1;
+    s32 last_y = surface->height - 1;
+    s32 pitch_px = surface->pitch / 4;
+    const u32* pixels = (const u32*)surface->memory;
 
     for (s32 x = 0; x < w; ++x) {
+        s32 sx0 = ctr_axis_x.src_index[x];
+        s32 sx1 = MIN(sx0 + 1, last_x);
+        u32 wx = ctr_axis_x.weight[x];
         u8* dest = fb + ((ox + x) * CTR_TOP_H + (CTR_TOP_H - 1 - oy)) * 3;
-        const u8* src = surface->memory + x * 4;
         for (s32 y = 0; y < h; ++y) {
-            dest[0] = src[0]; // blue
-            dest[1] = src[1]; // green
-            dest[2] = src[2]; // red
+            s32 sy0 = ctr_axis_y.src_index[y];
+            u32 wy = ctr_axis_y.weight[y];
+            const u32* row0 = pixels + sy0 * pitch_px;
+            u32 c = ctr_blend(row0[sx0], row0[sx1], wx);
+            if (wy < 256) {
+                const u32* row1 = pixels + MIN(sy0 + 1, last_y) * pitch_px;
+                c = ctr_blend(c, ctr_blend(row1[sx0], row1[sx1], wx), wy);
+            }
+            dest[0] = (u8)(c);       // blue
+            dest[1] = (u8)(c >> 8);  // green
+            dest[2] = (u8)(c >> 16); // red
             dest -= 3;
-            src += surface->pitch;
         }
     }
 }
@@ -226,7 +315,8 @@ int main(int argc, char** argv) {
     printf("Rayverse for 3DS (work in progress)\n");
     printf("Rayman 1 PC port - bring your own data\n\n");
     printf("Controls: B jump, Y punch, X action,\nA confirm, START menu, SELECT pause.\n");
-    printf("Hold L+R+SELECT to quit.\n\n");
+    printf("Hold L+R+SELECT to quit.\n");
+    printf("Tap the touch screen to change the\npicture size.\n\n");
 
     if (!ctr_check_game_data()) {
         ctr_wait_for_start();
