@@ -29,6 +29,8 @@ typedef struct headless_event_t {
 } headless_event_t;
 
 static headless_event_t headless_events[4096];
+#include "input_assist.c"
+
 static s32 headless_event_count;
 static s32 headless_next_event;
 static s64 headless_frame;
@@ -115,8 +117,28 @@ static void headless_save_screenshot(surface_t* surface, const char* name) {
     fprintf(headless_log, "[frame %lld] screenshot %s\n", (long long)headless_frame, name);
 }
 
+static bool headless_script_held[128]; // keys held according to the script
+static bool headless_sent_held[128];   // keys the game currently sees as held
+
 static void headless_key(u8 sc, bool down) {
-    PC_keyboard_interrupt_handler(down ? sc : (u8)(sc | 0x80));
+    headless_script_held[sc & 0x7F] = down;
+}
+
+// Apply the same crawl assist as the 3DS (if CRAWL_ASSIST is set), then send any changes to the game.
+static void headless_flush_keys(void) {
+    bool eff[128];
+    memcpy(eff, headless_script_held, sizeof(eff));
+    if (getenv("CRAWL_ASSIST")) {
+        crawl_assist_t a = crawl_assist(eff[SC_DOWN], eff[SC_LEFT], eff[SC_RIGHT], eff[SC_UP]);
+        if (a.hide_direction) eff[SC_LEFT] = eff[SC_RIGHT] = false;
+        if (a.add_jump) eff[SC_CONTROL] = true;
+    }
+    for (s32 sc = 1; sc < 128; ++sc) {
+        if (eff[sc] != headless_sent_held[sc]) {
+            headless_sent_held[sc] = eff[sc];
+            PC_keyboard_interrupt_handler(eff[sc] ? (u8)sc : (u8)(sc | 0x80));
+        }
+    }
 }
 
 static void headless_run_script(app_state_t* app_state) {
@@ -165,6 +187,7 @@ static void headless_log_voices(void) {
 
 void ctr_advance_frame(app_state_t* app_state) {
     headless_run_script(app_state);
+    headless_flush_keys();
 
     game_sound_buffer_t* sb = &app_state->game.sound_buffer;
     sb->sample_count = HEADLESS_RATE / 60;

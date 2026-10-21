@@ -11,6 +11,8 @@
 #define CTR_TOP_W    400
 #define CTR_TOP_H    240
 
+#include "input_assist.c"
+
 static PrintConsole ctr_console;
 static bool ctr_gfx_ready;
 
@@ -100,21 +102,12 @@ static void ctr_process_input(void) {
     }
     u32 held = hidKeysHeld();
 
-    // Crawling: Down + Left/Right. The PC version only crawls while Jump is also held (Down, Jump,
-    // then a direction), which isn't how the console versions play. So while Down and a direction
-    // are both held and Rayman is on the ground (main_etat 0 = standing, 1 = moving), we add the
-    // Jump press for the player, two frames after Down so that Rayman crouches first rather than
-    // jumping. In the air nothing is added, so this can't trigger the helicopter.
-    static s32 crawl_frames;
+    // Crawling: Down + Left/Right (see input_assist.c for how this maps onto the PC controls).
     u32 effective = held;
-    if ((held & KEY_DOWN) && (held & (KEY_LEFT | KEY_RIGHT)) && !(held & KEY_UP)) {
-        ++crawl_frames;
-        if (crawl_frames > 2 && (ray.main_etat == 0 || ray.main_etat == 1)) {
-            effective |= KEY_B;
-        }
-    } else {
-        crawl_frames = 0;
-    }
+    crawl_assist_t assist = crawl_assist((held & KEY_DOWN) != 0, (held & KEY_LEFT) != 0,
+                                         (held & KEY_RIGHT) != 0, (held & KEY_UP) != 0);
+    if (assist.hide_direction) effective &= ~(KEY_LEFT | KEY_RIGHT);
+    if (assist.add_jump) effective |= KEY_B;
 
     for (u32 i = 0; i < COUNT(ctr_keymap); ++i) {
         bool is_down = (effective & ctr_keymap[i].buttons) != 0;
@@ -238,12 +231,20 @@ static void ctr_cycle_display_mode(void) {
 
 // Copy the game's 320x200, 256-colour picture to the top screen, scaling it on the way.
 // The 3DS framebuffer is stored rotated: column by column, bottom to top, 3 bytes (B,G,R).
+//
+// Speed: instead of computing every screen pixel separately (192,000 of them in wide mode), each of
+// the 320 game columns is scaled vertically once, straight into framebuffer byte order. Screen
+// columns that show a single game column are then plain memcpy()s of that cached column (in wide
+// mode that is 4 out of every 5), and only the columns straddling two game columns are blended.
+#define CTR_MAX_SRC_W 320
+static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3];
+
 static void ctr_present(app_state_t* app_state) {
     game_state_t* game = &app_state->game;
     image_t* image = &game->draw_buffer;
     // The game sometimes points draw_buffer at a different buffer (effects); honour that, as engine.c does.
     const u8* src = (draw_buffer && draw_buffer != image->memory) ? draw_buffer : image->memory;
-    s32 src_w = image->width, src_h = image->height;
+    s32 src_w = MIN(image->width, CTR_MAX_SRC_W), src_h = image->height;
 
     if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h) {
         ctr_setup_display_mode(src_w, src_h);
@@ -264,28 +265,41 @@ static void ctr_present(app_state_t* app_state) {
     }
     s32 ox = (ctr_fb_w - w) / 2;
     s32 oy = (CTR_TOP_H - h) / 2;
-    s32 last_x = src_w - 1;
     s32 last_y = src_h - 1;
+    s32 col_bytes = h * 3;
+    s32 first_px = CTR_TOP_H - oy - h; // framebuffer index (from the bottom) of the lowest picture pixel
 
-    for (s32 x = 0; x < w; ++x) {
-        s32 sx0 = ctr_axis_x.src_index[x];
-        s32 sx1 = MIN(sx0 + 1, last_x);
-        u32 wx = ctr_axis_x.weight[x];
-        u8* dest = fb + ((ox + x) * CTR_TOP_H + (CTR_TOP_H - 1 - oy)) * 3;
-        for (s32 y = 0; y < h; ++y) {
+    // 1. Scale each game column vertically, into framebuffer order (bottom row first).
+    for (s32 sx = 0; sx < src_w; ++sx) {
+        u8* out = ctr_col_cache[sx];
+        for (s32 q = 0; q < h; ++q) {
+            s32 y = h - 1 - q; // q = 0 is the bottom of the picture
             s32 sy0 = ctr_axis_y.src_index[y];
             u32 wy = ctr_axis_y.weight[y];
-            const u8* row0 = src + sy0 * src_w;
-            u32 c = (wx >= 256) ? pal[row0[sx0]] : ctr_blend(pal[row0[sx0]], pal[row0[sx1]], wx);
+            u32 c = pal[src[sy0 * src_w + sx]];
             if (wy < 256) {
-                const u8* row1 = src + MIN(sy0 + 1, last_y) * src_w;
-                u32 c1 = (wx >= 256) ? pal[row1[sx0]] : ctr_blend(pal[row1[sx0]], pal[row1[sx1]], wx);
-                c = ctr_blend(c, c1, wy);
+                c = ctr_blend(c, pal[src[MIN(sy0 + 1, last_y) * src_w + sx]], wy);
             }
-            dest[0] = (u8)(c);       // blue
-            dest[1] = (u8)(c >> 8);  // green
-            dest[2] = (u8)(c >> 16); // red
-            dest -= 3;
+            out[q * 3 + 0] = (u8)(c);
+            out[q * 3 + 1] = (u8)(c >> 8);
+            out[q * 3 + 2] = (u8)(c >> 16);
+        }
+    }
+
+    // 2. Copy (or blend) cached columns into the framebuffer.
+    for (s32 x = 0; x < w; ++x) {
+        s32 sx0 = ctr_axis_x.src_index[x];
+        u32 wx = ctr_axis_x.weight[x];
+        u8* dest = fb + ((ox + x) * CTR_TOP_H + first_px) * 3;
+        if (wx >= 256 || sx0 + 1 >= src_w) {
+            memcpy(dest, ctr_col_cache[sx0], col_bytes);
+        } else {
+            const u8* a = ctr_col_cache[sx0];
+            const u8* b = ctr_col_cache[sx0 + 1];
+            u32 w1 = 256 - wx;
+            for (s32 i = 0; i < col_bytes; ++i) {
+                dest[i] = (u8)((a[i] * wx + b[i] * w1) >> 8);
+            }
         }
     }
 }
