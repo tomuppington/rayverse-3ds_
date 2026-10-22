@@ -405,6 +405,12 @@ void DISPLAY_FOND3(void) {
 
 //3CE20
 void DISPLAY_FOND_MENU(void) {
+    if (bottom_menu_active()) {
+        // 3DS port: the in-game menu is shown on the bottom screen; draw it over an empty picture
+        // (colour 0 shows the bottom screen's animated background, see bottom_menu.c).
+        memset(draw_buffer, 0, SCREEN_WIDTH * SCREEN_HEIGHT);
+        return;
+    }
     s32 v1 = SCREEN_WIDTH - Bloc_lim_W2 + Bloc_lim_W1;
     if (OptionGame) {
         if (prev_Bloc_lim_W1 != Bloc_lim_W1) {
@@ -426,6 +432,7 @@ void DISPLAY_FOND_MENU(void) {
         memset(draw_buffer, 0, (SCREEN_HEIGHT - Bloc_lim_H2) * SCREEN_WIDTH);
     } else {
         memcpy(draw_buffer, EffetBufferNormal, SCREEN_WIDTH*SCREEN_HEIGHT);
+        menu_rays_background = EffetBufferNormal; // 3DS port: animated rays behind the title menus (bottom_menu.c)
     }
 }
 

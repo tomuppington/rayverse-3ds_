@@ -143,6 +143,7 @@ void AFFICHE_ECRAN_SAVE(void) {
         ++compteur_clignote;
     }
     DISPLAY_FOND3();
+    menu_rays_background = PLAN3BIT; // 3DS port: animated rays behind "choose a game" (bottom_menu.c)
     display_text(language_txt[96], 160, debut_titre, 1, 0); // /choose a game/
 
     s16 start_xpos;
@@ -924,6 +925,7 @@ void LOAD_GENERAL_SCREEN(void) {
     s16 height = 0;
     LoadPcxOptions(EffetBufferNormal, 13, &width, &height, &rvb_plan3);
     //LoadPcxPaletteInVignet(13, &rvb_plan3); // opening twice no longer needed (we saved the palette in LoadPcxOptions)
+    menu_rays_main_menu_loaded(); // 3DS port: find the logo, to show animated rays around it (bottom_menu.c)
 }
 
 //36C88
@@ -932,6 +934,7 @@ void LOAD_OPTIONS_SCREEN(void) {
     s16 height = 0;
     LoadPcxOptions(EffetBufferNormal, 12, &width, &height, &rvb_plan3);
     //LoadPcxPaletteInVignet(12, &rvb_plan3);
+    menu_rays_other_menu_loaded();
 }
 
 //36CBC

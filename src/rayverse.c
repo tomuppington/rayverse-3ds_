@@ -93,6 +93,7 @@ typedef int GLint;
 #include "render.c"
 #include "misc_source.c"
 #include "stereo.c" // added: stereoscopic 3D layers (3DS port)
+#include "bottom_menu.c" // added: pause menu on the bottom screen (3DS port)
 
 // Source files in (mostly) alphabetical order, corresponding to a possible ordering of the PC version's sources
 #include "lowlevel.c"

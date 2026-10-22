@@ -339,7 +339,10 @@ static void ctr_load_config(void) {
 #define CTR_MAX_SRC_W SCREEN_WIDTH_MAX
 static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3] __attribute__((aligned(4)));
 
-static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
+// (Also used for full-colour pictures, rgb: 0x00RRGGBB per pixel instead of src + pal. Inlined into the
+// two functions below, so the 256-colour version used during play has no extra check per pixel.)
+static inline __attribute__((always_inline)) void ctr_scale_core(const u8* src, const u32* rgb, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
+#define CTR_PIXEL(offset) (rgb ? rgb[offset] : pal[src[offset]])
     s32 w = ctr_axis_x.out_size;
     s32 h = ctr_axis_y.out_size;
     if (w < ctr_fb_w || h < CTR_TOP_H) {
@@ -354,13 +357,13 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
     // framebuffer. Four pixels (12 bytes) are written as three 32-bit words.
     if (w == src_w && h == src_h && (h & 3) == 0) {
         for (s32 sx = 0; sx < src_w; ++sx) {
-            const u8* col = src + (src_h - 1) * src_w + sx; // bottom pixel of this column
+            s32 col = (src_h - 1) * src_w + sx; // bottom pixel of this column
             u32* d = (u32*)(fb + ((ox + sx) * CTR_TOP_H + first_px) * 3);
             for (s32 q = 0; q < h; q += 4) {
-                u32 c0 = pal[col[0]];
-                u32 c1 = pal[col[-src_w]];
-                u32 c2 = pal[col[-2 * src_w]];
-                u32 c3 = pal[col[-3 * src_w]];
+                u32 c0 = CTR_PIXEL(col);
+                u32 c1 = CTR_PIXEL(col - src_w);
+                u32 c2 = CTR_PIXEL(col - 2 * src_w);
+                u32 c3 = CTR_PIXEL(col - 3 * src_w);
                 col -= 4 * src_w;
                 d[0] = c0 | (c1 << 24);
                 d[1] = (c1 >> 8) | (c2 << 16);
@@ -384,13 +387,12 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
 
     // 1. Scale each game column vertically, into framebuffer order (bottom row first).
     for (s32 sx = 0; sx < src_w; ++sx) {
-        const u8* col = src + sx;
         u8* out = ctr_col_cache[sx];
         for (s32 q = 0; q < h; ++q) {
-            u32 c = pal[col[row_off0[q]]];
+            u32 c = CTR_PIXEL(sx + row_off0[q]);
             u32 wy = row_w[q];
             if (wy != 256) {
-                c = ctr_mix8(c, pal[col[row_off1[q]]], wy);
+                c = ctr_mix8(c, CTR_PIXEL(sx + row_off1[q]), wy);
             }
             out[0] = (u8)(c);
             out[1] = (u8)(c >> 8);
@@ -421,6 +423,57 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
             }
         }
     }
+#undef CTR_PIXEL
+}
+
+static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
+    ctr_scale_core(src, NULL, src_w, src_h, pal, fb);
+}
+
+static void ctr_scale_rgb_to_fb(const u32* rgb, s32 src_w, s32 src_h, u8* fb) {
+    ctr_scale_core(NULL, rgb, src_w, src_h, NULL, fb);
+}
+
+// Pause menu on the bottom screen (see bottom_menu.c): while the in-game menu is open, the top screen
+// keeps showing the last game picture (saved here every frame during levels) and the menu goes on the
+// bottom screen, which otherwise shows the text console.
+static u8 ctr_saved_frame[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
+static u32 ctr_saved_pal[256];
+static s32 ctr_saved_w, ctr_saved_h;
+static bool ctr_bottom_menu_shown;
+
+static u32 ctr_bottom_picture[320 * 240];
+
+static void ctr_draw_bottom_picture(void);
+
+static void ctr_draw_bottom_menu(const u8* src, s32 src_w, s32 src_h, const rgb_t* palette) {
+    bottom_menu_render(ctr_bottom_picture, src, src_w, src_h, palette);
+    ctr_draw_bottom_picture();
+}
+
+// Shows ctr_bottom_picture (0x00RRGGBB, 320x240) on the bottom screen, instead of the text console.
+static void ctr_draw_bottom_picture(void) {
+    const u32* picture = ctr_bottom_picture;
+    // The bottom screen's framebuffer (RGB565, set up by the text console) is stored rotated like the
+    // top one: column by column, bottom to top.
+    u16* fb = (u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
+    for (s32 x = 0; x < 320; ++x) {
+        u16* col = fb + x * 240;
+        for (s32 y = 0; y < 240; ++y) {
+            u32 c = picture[y * 320 + x];
+            col[239 - y] = (u16)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F));
+        }
+    }
+    ctr_bottom_menu_shown = true;
+}
+
+static void ctr_restore_bottom_console(void) {
+    // Menu closed: give the bottom screen back to the text console (the speed readout redraws itself).
+    consoleSelect(&ctr_stats_console);
+    consoleClear();
+    consoleSelect(&ctr_console);
+    consoleClear();
+    ctr_bottom_menu_shown = false;
 }
 
 static void ctr_present(app_state_t* app_state) {
@@ -429,6 +482,14 @@ static void ctr_present(app_state_t* app_state) {
     // The game sometimes points draw_buffer at a different buffer (effects); honour that, as engine.c does.
     const u8* src = (draw_buffer && draw_buffer != image->memory) ? draw_buffer : image->memory;
     s32 src_w = MIN(image->width, CTR_MAX_SRC_W), src_h = image->height;
+    const u8* game_src = src;
+    s32 game_w = src_w, game_h = src_h;
+    bool menu_below = bottom_menu_active() && ctr_saved_w > 0;
+    if (menu_below) {
+        src = ctr_saved_frame; // top screen: the game picture from before the menu opened
+        src_w = ctr_saved_w;
+        src_h = ctr_saved_h;
+    }
 
     float slider = osGet3DSliderState();
     ctr_stereo_on = slider > 0.05f;
@@ -440,15 +501,45 @@ static void ctr_present(app_state_t* app_state) {
     }
 
     // This frame's palette as packed B,G,R pixels.
-    static u32 pal[256];
+    static u32 frame_pal[256];
     for (s32 i = 0; i < 256; ++i) {
         rgb_t c = game->draw_palette.colors[i];
-        pal[i] = (u32)c.b | ((u32)c.g << 8) | ((u32)c.r << 16);
+        frame_pal[i] = (u32)c.b | ((u32)c.g << 8) | ((u32)c.r << 16);
+    }
+    const u32* pal = frame_pal;
+    if (menu_below) {
+        // Paused: the game picture in black and white, as the PC version shows it behind its menu.
+        static u32 grey_pal[256];
+        for (s32 i = 0; i < 256; ++i) {
+            u32 c = ctr_saved_pal[i];
+            u32 g = (((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF)) / 3;
+            grey_pal[i] = g | (g << 8) | (g << 16);
+        }
+        pal = grey_pal;
+    }
+    if (!menu_below && RaymanDansUneMapDuJeu && bottom_menu_enabled) {
+        memcpy(ctr_saved_frame, src, src_w * src_h);
+        memcpy(ctr_saved_pal, frame_pal, sizeof(ctr_saved_pal));
+        ctr_saved_w = src_w;
+        ctr_saved_h = src_h;
     }
 
-    if (!ctr_stereo_on) {
+    // Title-screen menus (bottom_menu.c): the title over animated rays on the top screen, the menu on
+    // the bottom screen. Flat, so in 3D the same picture goes to both eyes.
+    bool title_menu = !menu_below && menu_rays_active() && src_w == SCREEN_WIDTH_ORIGINAL && src_h == SCREEN_HEIGHT_ORIGINAL;
+    menu_rays_background = NULL; // set again by the game whenever it draws one
+
+    if (title_menu) {
+        static u32 top_picture[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+        menu_rays_render(top_picture, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors);
+        u8* left = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
+        ctr_scale_rgb_to_fb(top_picture, src_w, src_h, left);
+        if (ctr_stereo_on) {
+            memcpy(gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL), left, ctr_fb_w * CTR_TOP_H * 3);
+        }
+    } else if (!ctr_stereo_on) {
         ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
-    } else if (src_w == SCREEN_WIDTH && src_h == SCREEN_HEIGHT && stereo_frame_usable(src)) {
+    } else if (!menu_below && src_w == SCREEN_WIDTH && src_h == SCREEN_HEIGHT && stereo_frame_usable(src)) {
         static u8 eye_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
         s64 t0 = get_clock();
         stereo_compose_eye(eye_buffer, src, -1, slider);
@@ -459,11 +550,21 @@ static void ctr_present(app_state_t* app_state) {
         ctr_compose_ns += get_clock() - t0;
         ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
     } else {
-        // Slider up, but this screen has no depth layers (menus, map, ...): show it flat to both eyes.
-        ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
-        ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
+        // Slider up, but this screen has no depth layers (menus, map, ...): show it flat to both eyes
+        // (scaled once, then copied).
+        u8* left = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
+        ctr_scale_to_fb(src, src_w, src_h, pal, left);
+        memcpy(gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL), left, ctr_fb_w * CTR_TOP_H * 3);
     }
     stereo_end_frame();
+
+    if (menu_below) {
+        ctr_draw_bottom_menu(game_src, game_w, game_h, game->draw_palette.colors);
+    } else if (title_menu) {
+        ctr_draw_bottom_picture();
+    } else if (ctr_bottom_menu_shown) {
+        ctr_restore_bottom_console();
+    }
 }
 
 //----------------------------------------------------------------------------------------------
@@ -500,6 +601,7 @@ void ctr_advance_frame(app_state_t* app_state) {
         float seconds = (float)(before_wait - stats_start) / 1e9f;
         s32 fps = (s32)((float)stats_frames / seconds + 0.5f);
         s32 load = (s32)(100.0f * (float)busy_ns_total / (float)(before_wait - stats_start) + 0.5f);
+        if (!ctr_bottom_menu_shown) {
         consoleSelect(&ctr_stats_console);
         printf("\x1b[1;0HScreen: %4.1f ms/frame%s", (double)present_ns_total / 1e6 / stats_frames,
                ctr_stereo_on ? " (3D)" : "     ");
@@ -508,6 +610,7 @@ void ctr_advance_frame(app_state_t* app_state) {
         printf("\x1b[2;0HSpeed: %2d fps  CPU: %3d%%  sound gaps: %lu   ", fps, load,
                (unsigned long)(ctr_snd_underruns - underruns_at_start));
         consoleSelect(&ctr_console);
+        }
         present_ns_total = 0;
         ctr_compose_ns = 0;
         busy_ns_total = 0;
@@ -574,6 +677,8 @@ int main(int argc, char** argv) {
         return 0;
     }
     ctr_load_config(); // (in the game folder)
+    bottom_menu_enabled = true; // the in-game menu goes on the bottom screen
+    menu_rays_enabled = true;   // so do the title-screen menus, with the title on the top screen
 
     // The game's 320x200 picture, as 32-bit pixels (same as the PC version)
     memset(&app_state->game_surface, 0, sizeof(app_state->game_surface));

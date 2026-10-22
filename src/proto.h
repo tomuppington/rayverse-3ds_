@@ -41,6 +41,16 @@ void ps1_music_fade_out(void);
 void stereo_capture_background(void);
 void stereo_capture_map_background(void);
 extern bool stereo_wanted;
+// bottom_menu.c
+extern bool bottom_menu_enabled;
+bool bottom_menu_active(void);
+void bottom_menu_render(u32* out, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette);
+extern bool menu_rays_enabled;
+extern const u8* menu_rays_background;
+void menu_rays_main_menu_loaded(void);
+void menu_rays_other_menu_loaded(void);
+void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette);
+bool menu_rays_active(void);
 void stereo_capture_before_hud(void);
 bool stereo_frame_has_layers(void);
 void stereo_end_frame(void);

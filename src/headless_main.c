@@ -99,6 +99,55 @@ static u8 headless_key_scancode(const char* name) {
     exit(1);
 }
 
+// Pause menu on the bottom screen (BOTTOM_MENU=1): the frozen game picture for the top screen, and
+// the bottom screen picture, saved next to each screenshot taken while the menu is open.
+static u8 headless_saved_frame[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
+static rgb_t headless_saved_palette[256];
+static s32 headless_saved_w, headless_saved_h;
+
+static void headless_save_rgb(const char* name, const char* suffix, const u32* px, s32 w, s32 h) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s_%s.ppm", headless_out_dir, name, suffix);
+    FILE* fp = fopen(path, "wb");
+    if (!fp) return;
+    fprintf(fp, "P6 %d %d 255\n", w, h);
+    for (s32 i = 0; i < w * h; ++i) {
+        fputc((px[i] >> 16) & 0xFF, fp); fputc((px[i] >> 8) & 0xFF, fp); fputc(px[i] & 0xFF, fp);
+    }
+    fclose(fp);
+}
+
+static void headless_save_bottom_menu(app_state_t* app_state, const char* name) {
+    game_state_t* game = &app_state->game;
+    const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
+    static u32 bottom[320 * 240];
+    bottom_menu_render(bottom, src, SCREEN_WIDTH, SCREEN_HEIGHT, game->draw_palette.colors);
+    headless_save_rgb(name, "bottom", bottom, 320, 240);
+    static u32 top[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
+    for (s32 i = 0; i < headless_saved_w * headless_saved_h; ++i) {
+        rgb_t c = headless_saved_palette[headless_saved_frame[i]];
+        u32 g = ((u32)c.r + c.g + c.b) / 3; // black and white while paused, as on the 3DS
+        top[i] = (g << 16) | (g << 8) | g;
+    }
+    headless_save_rgb(name, "top", top, headless_saved_w, headless_saved_h);
+}
+
+// Title-screen menus on two screens (MENU_RAYS=1): the top and bottom screen pictures, saved next to each
+// screenshot as name_rays.ppm and name_raysbottom.ppm.
+static u32 headless_rays[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+static u32 headless_rays_bottom[320 * 240];
+static bool headless_rays_shown;
+
+static void headless_render_rays(app_state_t* app_state) {
+    headless_rays_shown = menu_rays_active();
+    if (headless_rays_shown) {
+        game_state_t* game = &app_state->game;
+        const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
+        menu_rays_render(headless_rays, headless_rays_bottom, src, SCREEN_WIDTH, SCREEN_HEIGHT, game->draw_palette.colors);
+    }
+    menu_rays_background = NULL;
+}
+
 static void headless_save_screenshot(surface_t* surface, const char* name) {
     char path[512];
     snprintf(path, sizeof(path), "%s/%s.ppm", headless_out_dir, name);
@@ -216,6 +265,11 @@ static void headless_run_script(app_state_t* app_state) {
             headless_release_at[sc] = (s32)headless_frame + 4;
         } else if (strcmp(e->kind, "shot") == 0) {
             headless_save_screenshot(app_state->active_surface, e->arg);
+            if (bottom_menu_active()) headless_save_bottom_menu(app_state, e->arg);
+            if (headless_rays_shown) {
+                headless_save_rgb(e->arg, "rays", headless_rays, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL);
+                headless_save_rgb(e->arg, "raysbottom", headless_rays_bottom, 320, 240);
+            }
             if (getenv("STEREO_TEST")) headless_save_anaglyph(app_state, e->arg);
         } else if (strcmp(e->kind, "mark") == 0) {
             fprintf(headless_log, "[frame %lld] MARK %s\n", (long long)headless_frame, e->arg);
@@ -242,6 +296,16 @@ static void headless_log_voices(void) {
 }
 
 void ctr_advance_frame(app_state_t* app_state) {
+    if (bottom_menu_enabled && !bottom_menu_active() && RaymanDansUneMapDuJeu) {
+        // keep the latest game picture for the top screen while the menu is on the bottom screen
+        game_state_t* game = &app_state->game;
+        const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
+        headless_saved_w = SCREEN_WIDTH;
+        headless_saved_h = SCREEN_HEIGHT;
+        memcpy(headless_saved_frame, src, SCREEN_WIDTH * SCREEN_HEIGHT);
+        memcpy(headless_saved_palette, game->draw_palette.colors, sizeof(headless_saved_palette));
+    }
+    headless_render_rays(app_state);
     headless_run_script(app_state);
     headless_flush_keys();
 
@@ -326,6 +390,8 @@ int main(int argc, char** argv) {
     app_state->running = true;
     widescreen_enabled = getenv("WIDESCREEN") != NULL; // test the wide view (3DS display option)
     if (widescreen_enabled) headless_display_mode = 0;
+    bottom_menu_enabled = getenv("BOTTOM_MENU") != NULL;
+    menu_rays_enabled = getenv("MENU_RAYS") != NULL;
     stereo_wanted = getenv("STEREO_TEST") != NULL; // record 3D layers for the anaglyph test pictures
     return main_Ray(argc, argv);
 }

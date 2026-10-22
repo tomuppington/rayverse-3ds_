@@ -2,3 +2,6 @@
 *.3dsx
 *.smdh
 *.map
+
+# The player's own title logo (see bottom_menu.c), never part of the project
+LOGO.PNG

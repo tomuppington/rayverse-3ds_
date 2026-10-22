@@ -456,6 +456,11 @@ void INIT_GENERAL_CHOICE(void) {
                 display_item->ypos = 185;
             } break;
         }
+        if (menu_rays_enabled) {
+            // 3DS port: the main menu is on the bottom screen and the logo on the top one (bottom_menu.c),
+            // so space the items evenly instead of around the logo.
+            display_item->ypos = 54 + 34 * i;
+        }
         display_item->xpos = basex;
         display_item->font_size = 1;
         display_item->is_fond = 1;
@@ -1717,7 +1722,9 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
                 set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], (TabH2[0] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
                 sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             }
-            DO_FADE_OUT();
+            if (!bottom_menu_active()) { // 3DS port: the top screen keeps the game picture (no fade)
+                DO_FADE_OUT();
+            }
             set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], (TabH2[SizeScreen] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
             sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             N_CLRSCR(DrawBufferNormal);
@@ -1828,6 +1835,12 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
             rvb[0] = rvb_options_in_game;
         }
         INIT_FADE_IN();
+        if (bottom_menu_active()) {
+            // 3DS port: the top screen showed the game all along, so don't fade it back in from black.
+            while (nb_fade > 0) {
+                DO_FADE();
+            }
+        }
 
     }
 }
