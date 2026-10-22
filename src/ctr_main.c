@@ -472,7 +472,14 @@ static void ctr_draw_bottom_picture(void) {
     ctr_bottom_menu_shown = true;
 }
 
-// The rays alone on the bottom screen (during play), drawn at half resolution.
+// The status panel on the bottom screen during levels (see bottom_menu.c).
+static void ctr_draw_bottom_status(const rgb_t* palette) {
+    status_panel_update(); // (redraws the panel only if something on it changed)
+    status_panel_render(ctr_bottom_picture, palette);
+    ctr_draw_bottom_picture();
+}
+
+// The rays alone on the bottom screen (outside levels), drawn at half resolution.
 static void ctr_draw_bottom_rays(void) {
     static u32 small[160 * 120];
     bottom_rays_render_small(small);
@@ -620,6 +627,8 @@ static void ctr_present(app_state_t* app_state) {
         ctr_draw_bottom_menu(game_src, game_w, game_h, game->draw_palette.colors);
     } else if (title_menu || title_menu_held || map_dialog || map_dialog_held) {
         ctr_draw_bottom_picture();
+    } else if (!ctr_show_stats && RaymanDansUneMapDuJeu) {
+        ctr_draw_bottom_status(game->draw_palette.colors);
     } else if (!ctr_show_stats) {
         ctr_draw_bottom_rays();
     } else if (ctr_bottom_menu_shown) {

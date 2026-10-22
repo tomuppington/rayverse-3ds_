@@ -289,6 +289,12 @@ static void headless_run_script(app_state_t* app_state) {
         } else if (strcmp(e->kind, "shot") == 0) {
             headless_save_screenshot(app_state->active_surface, e->arg);
             if (bottom_menu_active()) headless_save_bottom_menu(app_state, e->arg);
+            if (getenv("STATUS_PANEL") && RaymanDansUneMapDuJeu && !bottom_menu_active()) {
+                static u32 panel[320 * 240];
+                status_panel_update();
+                status_panel_render(panel, app_state->game.draw_palette.colors);
+                headless_save_rgb(e->arg, "panel", panel, 320, 240);
+            }
             if (headless_rays_shown) {
                 headless_save_rgb(e->arg, "rays", headless_rays, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL);
                 headless_save_rgb(e->arg, "raysbottom", headless_rays_bottom, 320, 240);

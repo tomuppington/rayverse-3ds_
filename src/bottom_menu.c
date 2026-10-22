@@ -116,6 +116,11 @@ void bottom_menu_render(u32* out, const u8* src, s32 src_w, s32 src_h, const rgb
     bottom_pulse += 10;
 }
 
+// Darkens a 0x00RRGGBB colour by k/256.
+static inline u32 menu_rays_darken_any(u32 c, u32 k) {
+    return ((((c >> 16) & 0xFF) * k >> 8) << 16) | ((((c >> 8) & 0xFF) * k >> 8) << 8) | ((c & 0xFF) * k >> 8);
+}
+
 // The rays alone at half resolution (160x120, 0x00RRGGBB), for the bottom screen during play: a
 // quarter of the work, so it costs little time per frame (each pixel is shown as 2x2).
 void bottom_rays_render_small(u32* out) {
@@ -139,6 +144,145 @@ void bottom_rays_render_small(u32* out) {
     }
     bottom_spin += 10;
     bottom_pulse += 10;
+}
+
+//----------------------------------------------------------------------------------------------
+// Status panel for the bottom screen during play: the world and level names, the cages freed in this
+// part of the world (shown with the Electoon medallion), lives, hit points, tings and the cages freed in
+// the whole game, over dark, slowly turning rays. Drawn with the game's own font and sprites.
+//
+// The panel is redrawn only when something on it changes (status_panel_update); every frame only the
+// rays move behind it (status_panel_render).
+
+static u8 status_panel[BOTTOM_W * BOTTOM_H]; // colour indices of the game's palette (0: rays show through)
+static u32 status_panel_key = 0xFFFFFFFF;
+static u16 status_spin, status_pulse;
+
+static obj_t* status_find_object(s16 type) {
+    for (s32 i = 0; i < level.nb_objects; ++i) {
+        if (level.objects[i].type == type) return level.objects + i;
+    }
+    return NULL;
+}
+
+// Draws a value 0-99 with the status bar's digits.
+static void status_digits(obj_t* sbar, s32 value, s16 x, s16 y) {
+    value = MAX(0, MIN(99, value));
+    display_sprite_NoClip(sbar, 28 + value / 10, x, y, 1);
+    display_sprite_NoClip(sbar, 28 + value % 10, x + 15, y, 1);
+}
+
+// Redraws the panel if anything on it changed. Returns true if it did.
+bool status_panel_update(void) {
+    world_info_t* wi = t_world_info + num_world_choice;
+    obj_t* sbar = (sbar_obj_id >= 0 && sbar_obj_id < level.nb_objects) ? level.objects + sbar_obj_id : NULL;
+    u32 key = (u32)num_world_choice | ((u32)wi->nb_cages << 5) | ((u32)Nb_total_cages << 8) |
+              ((u32)(status_bar.lives & 0x7F) << 15) | ((u32)status_bar.num_wiz << 22) |
+              ((u32)(ray.hit_points & 7) << 29);
+    key ^= (u32)status_bar.max_hitp * 0x9E3779B1u ^ (u32)language * 0x85EBCA6Bu ^ (u32)(num_world * 16 + num_level) * 0xC2B2AE35u;
+    if (key == status_panel_key || !sbar) return false;
+    status_panel_key = key;
+
+    // Draw with the game's routines into the panel: point the drawing at it for a moment.
+    u8* saved_buffer = draw_buffer;
+    s32 saved_w = screen_width, saved_h = screen_height;
+    s32 cx0, cx1, cy0, cy1;
+    get_sprite_clipping(&cx0, &cx1, &cy0, &cy1);
+    screen_width = BOTTOM_W;
+    screen_height = BOTTOM_H;
+    draw_buffer = status_panel;
+    memset(status_panel, 0, sizeof(status_panel));
+    sprite_clipping(0, BOTTOM_W, 0, BOTTOM_H);
+
+    // World and level names, in the colours the world map uses.
+    static const s8 world_colours[7] = {5, 5, 3, 0, 2, 1, 1};
+    s32 world = wi->world;
+    if (world >= 1 && world <= 6) {
+        display_text(language_txt[23 + world], BOTTOM_W / 2, 26, 1, world_colours[world]);
+    }
+    if (wi->text) {
+        display_text(wi->text, BOTTOM_W / 2, 48, 2, wi->color);
+    }
+
+    // Cages of this part of the world: the medallion with its Electoons (as when a cage is freed).
+    obj_t* medal = status_find_object(TYPE_197_MEDAILLON_TOON);
+    s32 cages = MIN(6, wi->nb_cages);
+    if (medal) {
+        obj_t m = *medal;
+        m.main_etat = m.init_main_etat;
+        m.sub_etat = (u8)(32 + MAX(0, cages - 1));
+        m.anim_index = m.eta[m.main_etat][m.sub_etat].anim_index;
+        anim_t* anim = m.animations + m.anim_index;
+        m.anim_frame = (cages == 0 || anim->frames_count == 0) ? 0 : anim->frames_count - 1;
+        m.flags.flip_x = 0;
+        m.scale = 256;
+        m.screen_x = 92 - m.offset_bx;
+        m.screen_y = 150 - m.offset_by;
+        display2(&m);
+        char text[32];
+        snprintf(text, sizeof(text), "/%d of 6/", (int)cages);
+        display_text(text, 92, 196, 2, 5);
+    }
+
+    // Lives and hit points, tings: the status bar's own sprites, laid out as on the main screen.
+    s16 sx = 182, sy = 82;
+    display_sprite_NoClip(sbar, 27, sx, sy, 1);
+    status_digits(sbar, status_bar.lives, sx + 39, sy);
+    if (ray.hit_points != (u8)-1) {
+        display_sprite_NoClip(sbar, 17 + status_bar.hp_sprites[1], sx + 19, sy + 22, 1);
+        if (status_bar.max_hitp == 4) {
+            display_sprite_NoClip(sbar, 20 + status_bar.hp_sprites[0], sx + 43, sy + 22, 1);
+        }
+    }
+    s16 tx = 186, ty = 136;
+    display_sprite_NoClip(sbar, 56, tx, ty, 1);
+    status_digits(sbar, status_bar.num_wiz, tx + 32, ty);
+
+    // Cages freed in the whole game.
+    char total[32];
+    snprintf(total, sizeof(total), "/cages/%d of 102/", (int)Nb_total_cages);
+    display_text(total, 228, 182, 2, 1);
+
+    draw_buffer = saved_buffer;
+    screen_width = saved_w;
+    screen_height = saved_h;
+    sprite_clipping(cx0, cx1, cy0, cy1);
+    return true;
+}
+
+// Forget the panel (e.g. a new level), so that it is redrawn.
+void status_panel_reset(void) {
+    status_panel_key = 0xFFFFFFFF;
+}
+
+// Draws the bottom screen during play (0x00RRGGBB, 320x240): the panel over dark, slow rays (computed
+// at half resolution).
+void status_panel_render(u32* out, const rgb_t* palette) {
+    if (!bottom_tables_ready) bottom_menu_init_tables();
+    s32 band = ((s32)(sinf((float)status_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
+    const s32 outer = 200;
+    static u16 brightness[256];
+    for (s32 r = 0; r < 256; ++r) {
+        u32 k;
+        if (r < band) k = (u32)(r * 256 / band);
+        else if (r < outer) k = (u32)((outer - r) * 256 / (outer - band));
+        else k = 0;
+        brightness[r] = (u16)(k * 90 >> 8); // dark: about a third of the menus' brightness
+    }
+    for (s32 y = 0; y < BOTTOM_H; y += 2) {
+        for (s32 x = 0; x < BOTTOM_W; x += 2) {
+            s32 i = y * BOTTOM_W + x;
+            u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
+            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]);
+            u32* o = out + i;
+            const u8* p = status_panel + i;
+            #define STATUS_PIXEL(k, off) { u8 q = p[off]; if (q) { rgb_t pc = palette[q]; o[off] = ((u32)pc.r << 16) | ((u32)pc.g << 8) | pc.b; } else o[off] = ray; }
+            STATUS_PIXEL(0, 0) STATUS_PIXEL(1, 1) STATUS_PIXEL(2, BOTTOM_W) STATUS_PIXEL(3, BOTTOM_W + 1)
+            #undef STATUS_PIXEL
+        }
+    }
+    status_spin += 4;
+    status_pulse += 4;
 }
 
 //----------------------------------------------------------------------------------------------
