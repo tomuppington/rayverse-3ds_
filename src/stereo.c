@@ -183,9 +183,7 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
 
     if (stereo_scene == STEREO_SCENE_MAP) {
         // World map: a pixel is part of the frame (or the names) if it is black or differs from what the
-        // binoculars show there; the frame is shifted, everything seen through it is not. Where the
-        // shifted frame uncovers a sliver beside the binoculars, show the map that the game drew there
-        // (the binoculars' picture is a little bigger than the holes), so each eye's view is full size.
+        // binoculars show there; the frame is shifted, everything seen through it is not.
         for (s32 y = 0; y < STEREO_H; ++y) {
             const u8* fin  = final_frame + y * STEREO_W;
             const u8* main = stereo_layer_main + y * STEREO_W;
@@ -193,7 +191,7 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
             for (s32 x = 0; x < STEREO_W; ++x) {
                 s32 xf = stereo_clamp_x(x - shift_front);
                 u8 f = fin[xf];
-                dst[x] = (f == 0 || f != main[xf]) ? f : main[x];
+                dst[x] = (f == 0 || f != main[xf]) ? f : fin[x];
             }
         }
         return;
