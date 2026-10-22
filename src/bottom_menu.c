@@ -259,6 +259,7 @@ static inline u32 menu_rays_darken(u32 c, u32 k) {
 void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette) {
     if (!bottom_tables_ready) bottom_menu_init_tables();
     const u8* bg = menu_rays_background;
+    if (!bg) return;
 
     // The menus fade in and out by darkening the palette: darken everything else the same way.
     const rgb_t* full = rvb[current_pal_id].colors;

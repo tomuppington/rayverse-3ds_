@@ -527,7 +527,6 @@ static void ctr_present(app_state_t* app_state) {
     // Title-screen menus (bottom_menu.c): the title over animated rays on the top screen, the menu on
     // the bottom screen. Flat, so in 3D the same picture goes to both eyes.
     bool title_menu = !menu_below && menu_rays_active() && src_w == SCREEN_WIDTH_ORIGINAL && src_h == SCREEN_HEIGHT_ORIGINAL;
-    menu_rays_background = NULL; // set again by the game whenever it draws one
 
     if (title_menu) {
         static u32 top_picture[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
@@ -565,6 +564,7 @@ static void ctr_present(app_state_t* app_state) {
     } else if (ctr_bottom_menu_shown) {
         ctr_restore_bottom_console();
     }
+    menu_rays_background = NULL; // (after drawing) set again by the game whenever it draws one
 }
 
 //----------------------------------------------------------------------------------------------
