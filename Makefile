@@ -10,7 +10,7 @@ TARGET      := rayverse3ds
 APP_TITLE   := Rayverse 3DS
 APP_DESC    := Rayman 1 PC port (needs your own game data)
 APP_AUTHOR  := Rayverse team / 3DS port
-APP_ICON    := $(DEVKITPRO)/libctru/default_icon.png
+APP_ICON    := icon.png
 
 CC      := $(DEVKITARM)/bin/arm-none-eabi-gcc
 ARCH    := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
