@@ -410,8 +410,8 @@ static void ctr_present(app_state_t* app_state) {
 
     if (!ctr_stereo_on) {
         ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
-    } else if (src_w == SCREEN_WIDTH && src_h == 200 && stereo_frame_usable(src)) {
-        static u8 eye_buffer[SCREEN_WIDTH_MAX * 200];
+    } else if (src_w == SCREEN_WIDTH && src_h == SCREEN_HEIGHT && stereo_frame_usable(src)) {
+        static u8 eye_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
         s64 t0 = get_clock();
         stereo_compose_eye(eye_buffer, src, -1, slider);
         ctr_compose_ns += get_clock() - t0;
