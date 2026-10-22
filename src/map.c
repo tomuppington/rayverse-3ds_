@@ -114,9 +114,9 @@ void set_default_Bloc_clipping(void) {
 // 1:1 display mode is on and the level is big enough; otherwise the original 320x200.
 void widescreen_level_start(void) {
     s32 w = SCREEN_WIDTH_ORIGINAL;
-    // Betilla's levels (cutscenes) keep the original picture: their text is laid out for it.
-    bool fairy_level = (num_world == 1 && (num_level == 3 || num_level == 8 || num_level == 17)) ||
-                       (num_world == 2 && num_level == 11) || (num_world == 3 && num_level == 11);
+    // Betilla's levels use the full-size picture too; in two of them Betilla starts further right (see
+    // below), so that she only comes into view as Rayman walks up to her, as in the original.
+    bool fairy_level = false;
     // Levels whose background scrolls in vertical strips (type 1) are laid out for 320 pixels across.
     bool strip_background = Type_Scroll[10 * (num_world - 1) + Num_Fond] == 1;
     s32 h = SCREEN_HEIGHT_ORIGINAL;
@@ -135,6 +135,17 @@ void widescreen_level_start(void) {
     screen_height = h;
     set_default_Bloc_clipping();
     sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
+    if (w > SCREEN_WIDTH_ORIGINAL && !play_window_boxed && num_world == 1 && (num_level == 3 || num_level == 8)) {
+        // In these two of Betilla's levels she waits just past the right edge of the original screen
+        // (in the others she is next to Rayman from the start); move her past the wider one.
+        for (s32 i = 0; i < level.nb_objects; ++i) {
+            obj_t* obj = level.objects + i;
+            if (obj->type == TYPE_153_FEE) {
+                obj->x += w - SCREEN_WIDTH_ORIGINAL;
+                obj->init_x += w - SCREEN_WIDTH_ORIGINAL;
+            }
+        }
+    }
     if (play_window_boxed) {
         memset(DrawBufferNormal, 0, SCREEN_WIDTH * SCREEN_HEIGHT); // black sides
     }

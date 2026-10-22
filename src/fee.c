@@ -3,8 +3,8 @@
 void INIT_TXT_FEE(void) {
     for (s32 i = 0; i <= 9; ++i) {
         if (text_to_display[i].text[0] != '\0') {
-            text_to_display[i].xpos = 150;
-            text_to_display[i].ypos = 188;
+            text_to_display[i].xpos = 150 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2; // (3DS port: centred on wider screens)
+            text_to_display[i].ypos = 188 + (SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL);    // (in the bottom black bar)
             text_to_display[i].font_size = 2;
             text_to_display[i].color = 5;
             text_to_display[i].field_D5 = 0;
@@ -321,7 +321,7 @@ void DO_FEE(obj_t* obj) {
         }
         png_or_fee->x += 4;
         png_or_fee->screen_x += 4;
-        if (png_or_fee->screen_x > 310) {
+        if (png_or_fee->screen_x > SCREEN_WIDTH - 10) { // (3DS port: the right edge of wider screens)
             png_or_fee->anim_frame = 0;
             png_or_fee->flags.alive = 0;
             png_or_fee->is_active = 0;

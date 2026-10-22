@@ -125,6 +125,37 @@ void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
     }
 }
 
+// 3DS port: how a background shorter than the screen is extended (see Display_Back_Screen).
+s32 bg_fill_mode = BG_FILL_REPEAT;
+s32 bg_rows_filled; // (for testing) rows the last frame had to fill
+
+// Scales the background rows first_row..last_row of the window (x1..x2, y1..y2) to cover all of its
+// rows: 'zoom' scales both ways around the middle of the window (keeping its shape, cutting a little
+// off the sides), otherwise it stretches only vertically. Nearest pixel, no blending.
+static void bg_fill_scale(s32 x1, s32 y1, s32 x2, s32 y2, s32 first_row, s32 last_row, bool zoom) {
+    static u8 rows[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
+    s32 src_h = last_row - first_row + 1;
+    s32 dst_h = y2 - y1;
+    s32 w = SCREEN_WIDTH;
+    memcpy(rows, draw_buffer + first_row * w, src_h * w);
+    s32 step = (src_h << 16) / dst_h; // source rows (and columns, for zoom) per screen pixel, 16.16
+    s32 cx = (x1 + x2) / 2;
+    static s16 col_map[SCREEN_WIDTH_MAX];
+    for (s32 x = x1; x < x2; ++x) {
+        col_map[x] = zoom ? (s16)(cx + (((x - cx) * step) >> 16)) : (s16)x;
+    }
+    for (s32 r = 0; r < dst_h; ++r) {
+        s32 sr = (r * step) >> 16;
+        const u8* src = rows + sr * w;
+        u8* dst = draw_buffer + (y1 + r) * w;
+        if (zoom) {
+            for (s32 x = x1; x < x2; ++x) dst[x] = src[col_map[x]];
+        } else {
+            memcpy(dst + x1, src + x1, x2 - x1);
+        }
+    }
+}
+
 //77BA0
 void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2, s16 h2) {
     s32 y = h1;
@@ -180,19 +211,25 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                 }
             }
         }
-        // 3DS port: a background shorter than the screen leaves rows uncovered at the top (or bottom);
-        // fill them with the nearest background row, e.g. more sky.
+        // 3DS port: a background shorter than the screen leaves rows uncovered at the top (or bottom).
+        // How they are filled depends on bg_fill_mode: repeat the nearest background row (e.g. more sky),
+        // or zoom / stretch the background picture so that it covers the whole window.
         {
             s32 first_row = MAX(y, -v68);                    // first screen row the background covers
             s32 last_row = MIN(h2, plan_height - v68) - 1;   // last screen row it covers
-            if (first_row <= last_row) {
-                u8* first_src = draw_buffer + first_row * SCREEN_WIDTH;
-                for (s32 r = y; r < first_row; ++r) {
-                    memcpy(draw_buffer + r * SCREEN_WIDTH + w1, first_src + w1, w2 - w1);
-                }
-                u8* last_src = draw_buffer + last_row * SCREEN_WIDTH;
-                for (s32 r = last_row + 1; r < h2; ++r) {
-                    memcpy(draw_buffer + r * SCREEN_WIDTH + w1, last_src + w1, w2 - w1);
+            if (first_row <= last_row && (first_row > y || last_row < h2 - 1)) {
+                bg_rows_filled = (y < first_row ? first_row - y : 0) + (last_row < h2 - 1 ? h2 - 1 - last_row : 0);
+                if (bg_fill_mode == BG_FILL_REPEAT) {
+                    u8* first_src = draw_buffer + first_row * SCREEN_WIDTH;
+                    for (s32 r = y; r < first_row; ++r) {
+                        memcpy(draw_buffer + r * SCREEN_WIDTH + w1, first_src + w1, w2 - w1);
+                    }
+                    u8* last_src = draw_buffer + last_row * SCREEN_WIDTH;
+                    for (s32 r = last_row + 1; r < h2; ++r) {
+                        memcpy(draw_buffer + r * SCREEN_WIDTH + w1, last_src + w1, w2 - w1);
+                    }
+                } else {
+                    bg_fill_scale(w1, y, w2, h2, first_row, last_row, bg_fill_mode == BG_FILL_ZOOM);
                 }
             }
         }
