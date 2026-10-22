@@ -96,11 +96,14 @@ static const ctr_keymap_t ctr_keymap[] = {
 
 static bool ctr_key_was_down[COUNT(ctr_keymap)];
 static void ctr_cycle_display_mode(void);
+static bool ctr_show_stats; // bottom screen during play: speed readout instead of the rays
 
 static void ctr_process_input(void) {
     hidScanInput();
     if (hidKeysDown() & KEY_TOUCH) {
-        ctr_cycle_display_mode(); // tap the touch screen to change how the picture fills the screen
+        // Tap the touch screen to switch the bottom screen between the rays and the speed readout.
+        // (The picture mode is in the options: graphics details.)
+        ctr_show_stats = !ctr_show_stats;
     }
     u32 held = hidKeysHeld();
 
@@ -440,6 +443,8 @@ static void ctr_scale_rgb_to_fb(const u32* rgb, s32 src_w, s32 src_h, u8* fb) {
 static u8 ctr_saved_frame[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
 static u32 ctr_saved_pal[256];
 static s32 ctr_saved_w, ctr_saved_h;
+static u8 ctr_saved_eyes[2][SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX]; // ...and each eye's picture, if it was in 3D
+static bool ctr_saved_eyes_valid;
 static bool ctr_bottom_menu_shown;
 
 static u32 ctr_bottom_picture[320 * 240];
@@ -462,6 +467,25 @@ static void ctr_draw_bottom_picture(void) {
         for (s32 y = 0; y < 240; ++y) {
             u32 c = picture[y * 320 + x];
             col[239 - y] = (u16)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F));
+        }
+    }
+    ctr_bottom_menu_shown = true;
+}
+
+// The rays alone on the bottom screen (during play), drawn at half resolution.
+static void ctr_draw_bottom_rays(void) {
+    static u32 small[160 * 120];
+    bottom_rays_render_small(small);
+    u16* fb = (u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
+    for (s32 x = 0; x < 160; ++x) {
+        u16* col0 = fb + (2 * x) * 240;
+        u16* col1 = col0 + 240;
+        for (s32 y = 0; y < 120; ++y) {
+            u32 c = small[y * 160 + x];
+            u16 p = (u16)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F));
+            s32 fy = 239 - 2 * y;
+            col0[fy] = p; col0[fy - 1] = p;
+            col1[fy] = p; col1[fy - 1] = p;
         }
     }
     ctr_bottom_menu_shown = true;
@@ -518,6 +542,7 @@ static void ctr_present(app_state_t* app_state) {
         pal = grey_pal;
     }
     if (!menu_below && RaymanDansUneMapDuJeu && bottom_menu_enabled) {
+        ctr_saved_eyes_valid = false; // (set again below if this frame is shown in 3D)
         memcpy(ctr_saved_frame, src, src_w * src_h);
         memcpy(ctr_saved_pal, frame_pal, sizeof(ctr_saved_pal));
         ctr_saved_w = src_w;
@@ -531,29 +556,40 @@ static void ctr_present(app_state_t* app_state) {
     bool title_menu_held = !menu_below && !title_menu && menu_rays_holding(src, src_w, src_h);
 
     if (title_menu || title_menu_held) {
+        // In 3D: the logo in front of the screen, the rays behind it (one picture for each eye).
         static u32 top_picture[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+        static u32 top_picture_right[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+        u32* right = ctr_stereo_on ? top_picture_right : NULL;
         if (title_menu) {
-            menu_rays_render(top_picture, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors);
+            menu_rays_render(top_picture, right, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors, slider);
         } else {
-            menu_rays_render_held(top_picture, ctr_bottom_picture, game->draw_palette.colors);
+            menu_rays_render_held(top_picture, right, ctr_bottom_picture, game->draw_palette.colors, slider);
         }
-        u8* left = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
-        ctr_scale_rgb_to_fb(top_picture, src_w, src_h, left);
-        if (ctr_stereo_on) {
-            memcpy(gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL), left, ctr_fb_w * CTR_TOP_H * 3);
+        ctr_scale_rgb_to_fb(top_picture, src_w, src_h, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        if (right) {
+            ctr_scale_rgb_to_fb(right, src_w, src_h, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
         }
     } else if (!ctr_stereo_on) {
         ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
     } else if (!menu_below && src_w == SCREEN_WIDTH && src_h == SCREEN_HEIGHT && stereo_frame_usable(src)) {
+        // Each eye's picture is kept (in ctr_saved_eyes) for the paused screen, so it stays in 3D.
+        bool keep = RaymanDansUneMapDuJeu && bottom_menu_enabled;
         static u8 eye_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
+        u8* left_eye = keep ? ctr_saved_eyes[0] : eye_buffer;
+        u8* right_eye = keep ? ctr_saved_eyes[1] : eye_buffer;
         s64 t0 = get_clock();
-        stereo_compose_eye(eye_buffer, src, -1, slider);
+        stereo_compose_eye(left_eye, src, -1, slider);
         ctr_compose_ns += get_clock() - t0;
-        ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        ctr_scale_to_fb(left_eye, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
         t0 = get_clock();
-        stereo_compose_eye(eye_buffer, src, +1, slider);
+        stereo_compose_eye(right_eye, src, +1, slider);
         ctr_compose_ns += get_clock() - t0;
-        ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
+        ctr_scale_to_fb(right_eye, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
+        ctr_saved_eyes_valid = keep;
+    } else if (menu_below && ctr_saved_eyes_valid) {
+        // Paused in 3D: the last game picture of each eye, in black and white.
+        ctr_scale_to_fb(ctr_saved_eyes[0], src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        ctr_scale_to_fb(ctr_saved_eyes[1], src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
     } else {
         // Slider up, but this screen has no depth layers (menus, map, ...): show it flat to both eyes
         // (scaled once, then copied).
@@ -567,6 +603,8 @@ static void ctr_present(app_state_t* app_state) {
         ctr_draw_bottom_menu(game_src, game_w, game_h, game->draw_palette.colors);
     } else if (title_menu || title_menu_held) {
         ctr_draw_bottom_picture();
+    } else if (!ctr_show_stats) {
+        ctr_draw_bottom_rays();
     } else if (ctr_bottom_menu_shown) {
         ctr_restore_bottom_console();
     }

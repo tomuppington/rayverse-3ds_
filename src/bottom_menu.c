@@ -116,6 +116,31 @@ void bottom_menu_render(u32* out, const u8* src, s32 src_w, s32 src_h, const rgb
     bottom_pulse += 10;
 }
 
+// The rays alone at half resolution (160x120, 0x00RRGGBB), for the bottom screen during play: a
+// quarter of the work, so it costs little time per frame (each pixel is shown as 2x2).
+void bottom_rays_render_small(u32* out) {
+    if (!bottom_tables_ready) bottom_menu_init_tables();
+    s32 band = ((s32)(sinf((float)bottom_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
+    const s32 outer = 200;
+    static u16 brightness[256];
+    for (s32 r = 0; r < 256; ++r) {
+        if (r < band) brightness[r] = (u16)(r * 256 / band);
+        else if (r < outer) brightness[r] = (u16)((outer - r) * 256 / (outer - band));
+        else brightness[r] = 0;
+    }
+    for (s32 y = 0; y < BOTTOM_H / 2; ++y) {
+        s32 ti = (2 * y) * BOTTOM_W;
+        u32* o = out + y * (BOTTOM_W / 2);
+        for (s32 x = 0; x < BOTTOM_W / 2; ++x, ti += 2) {
+            u32 c = bottom_wedge_colour[(u16)(bottom_angle[ti] - bottom_spin) & 1023];
+            u32 k = brightness[bottom_radius[ti]];
+            o[x] = ((((c >> 16) & 0xFF) * k >> 8) << 16) | ((((c >> 8) & 0xFF) * k >> 8) << 8) | ((c & 0xFF) * k >> 8);
+        }
+    }
+    bottom_spin += 10;
+    bottom_pulse += 10;
+}
+
 //----------------------------------------------------------------------------------------------
 // The title-screen menus (main menu, its options pages, "choose a game") on two screens: the top screen
 // shows the title (the RAYMAN logo over the same animated rays), the bottom screen the menu over the rays.
@@ -259,13 +284,15 @@ static u16 menu_layer[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
 static u8 menu_layer_frame[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
 static bool menu_layer_valid;
 
-static void menu_rays_compose(u32* top, u32* bottom, s32 w, s32 h, const rgb_t* palette);
+static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 h, const rgb_t* palette, float strength);
 
 // Draws both screens for a title-screen menu (0x00RRGGBB, row by row):
-// - top (320x200, the game's picture size): the animated rays with the logo;
+// - top (320x200, the game's picture size): the animated rays with the logo. For 3D (top_right not
+//   NULL, strength = 3D slider), top gets the left eye's picture and top_right the right eye's: the
+//   rays deep behind the screen, the logo in front of it;
 // - bottom (320x240): the menu from the game's picture src (320x200, in the middle), over the rays.
 // Pixels of src still showing this frame's background picture count as background.
-void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette) {
+void menu_rays_render(u32* top, u32* top_right, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette, float strength) {
     const u8* bg = menu_rays_background;
     if (!bg || w != SCREEN_WIDTH_ORIGINAL || h != SCREEN_HEIGHT_ORIGINAL) return;
     s32 n = w * h;
@@ -274,7 +301,7 @@ void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const 
     }
     memcpy(menu_layer_frame, src, n);
     menu_layer_valid = true;
-    menu_rays_compose(top, bottom, w, h, palette);
+    menu_rays_compose(top, top_right, bottom, w, h, palette, strength);
 }
 
 // True if this frame shows the same picture as the last title-menu frame (see menu_layer).
@@ -285,11 +312,20 @@ bool menu_rays_holding(const u8* src, s32 w, s32 h) {
 }
 
 // Draws both screens again from the last title-menu frame (with this frame's palette and rays).
-void menu_rays_render_held(u32* top, u32* bottom, const rgb_t* palette) {
-    menu_rays_compose(top, bottom, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL, palette);
+void menu_rays_render_held(u32* top, u32* top_right, u32* bottom, const rgb_t* palette, float strength) {
+    menu_rays_compose(top, top_right, bottom, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL, palette, strength);
 }
 
-static void menu_rays_compose(u32* top, u32* bottom, s32 w, s32 h, const rgb_t* palette) {
+// 3D depths of the title screen, in pixels at full slider (positive: behind the screen), and the
+// shift of a layer for one eye (eye -1: left, +1: right), the same way as stereo.c.
+#define MENU_RAYS_DEPTH 4.0f
+#define MENU_LOGO_DEPTH (-2.5f)
+static inline s32 menu_rays_shift(float depth, float strength, s32 eye) {
+    float d = depth * strength;
+    return (s32)(d + (d >= 0 ? 0.5f : -0.5f)) * eye;
+}
+
+static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 h, const rgb_t* palette, float strength) {
     if (!bottom_tables_ready) bottom_menu_init_tables();
 
     // The menus fade in and out by darkening the palette: darken everything else the same way.
@@ -312,21 +348,30 @@ static void menu_rays_compose(u32* top, u32* bottom, s32 w, s32 h, const rgb_t* 
         brightness[r] = (u16)(k * fade >> 8);
     }
 
-    // Top: rays (the middle 320x200 of the 320x240 tables) and the logo.
+    // Top: rays (the middle 320x200 of the 320x240 tables) and the logo; in 3D once for each eye, each
+    // layer sampled from x - shift.
     s32 tx = (BOTTOM_W - w) / 2, ty = (BOTTOM_H - h) / 2;
-    for (s32 y = 0; y < h; ++y) {
-        s32 ti = (y + ty) * BOTTOM_W + tx;
-        const u32* ov = menu_top_overlay + y * w;
-        u32* o = top + y * w;
-        for (s32 x = 0; x < w; ++x) {
-            u32 lc = menu_top_overlay_ready ? ov[x] : 0;
-            if (lc) {
-                o[x] = menu_rays_darken(lc, fade);
-            } else {
-                u32 c = bottom_wedge_colour[(u16)(bottom_angle[ti + x] - bottom_spin) & 1023];
-                o[x] = menu_rays_darken(c, brightness[bottom_radius[ti + x]]);
+    for (s32 eye = (top_right ? -1 : 0); eye <= (top_right ? 1 : 0); eye += 2) {
+        u32* out = (eye > 0) ? top_right : top;
+        s32 shift_rays = menu_rays_shift(MENU_RAYS_DEPTH, strength, eye);
+        s32 shift_logo = menu_rays_shift(MENU_LOGO_DEPTH, strength, eye);
+        for (s32 y = 0; y < h; ++y) {
+            s32 ti = (y + ty) * BOTTOM_W + tx;
+            const u32* ov = menu_top_overlay + y * w;
+            u32* o = out + y * w;
+            for (s32 x = 0; x < w; ++x) {
+                s32 lx = x - shift_logo;
+                u32 lc = (menu_top_overlay_ready && lx >= 0 && lx < w) ? ov[lx] : 0;
+                if (lc) {
+                    o[x] = menu_rays_darken(lc, fade);
+                } else {
+                    s32 rx = MAX(0, MIN(w - 1, x - shift_rays));
+                    u32 c = bottom_wedge_colour[(u16)(bottom_angle[ti + rx] - bottom_spin) & 1023];
+                    o[x] = menu_rays_darken(c, brightness[bottom_radius[ti + rx]]);
+                }
             }
         }
+        if (eye == 0) break;
     }
 
     // Bottom: the menu, in the middle, over the rays.

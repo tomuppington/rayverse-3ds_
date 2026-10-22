@@ -182,16 +182,22 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
     s32 x_hi = MIN(STEREO_W, STEREO_W + min_shift);
 
     if (stereo_scene == STEREO_SCENE_MAP) {
-        // World map: a pixel is part of the frame (or the names) if it is black or differs from what the
-        // binoculars show there; the frame is shifted, everything seen through it is not.
+        // World map: a pixel is part of the frame (or the names) if it differs from what the binoculars
+        // show there, or if it is black outside the part of the map the binoculars show; the frame is
+        // shifted, everything seen through it is not. (Black pixels of the map itself, like the outlines
+        // of the dotted paths, match the map and stay flat.)
+        s32 view_x0 = JumelleXMin, view_x1 = JumelleXMin + LargeurJumelle + 2;
+        s32 view_y0 = JumelleYMin, view_y1 = JumelleYMin + HauteurJumelle + 2;
         for (s32 y = 0; y < STEREO_H; ++y) {
             const u8* fin  = final_frame + y * STEREO_W;
             const u8* main = stereo_layer_main + y * STEREO_W;
             u8* dst = out + y * STEREO_W;
+            bool row_in_view = y >= view_y0 && y < view_y1;
             for (s32 x = 0; x < STEREO_W; ++x) {
                 s32 xf = stereo_clamp_x(x - shift_front);
                 u8 f = fin[xf];
-                dst[x] = (f == 0 || f != main[xf]) ? f : fin[x];
+                bool in_view = row_in_view && xf >= view_x0 && xf < view_x1;
+                dst[x] = (f != main[xf] || (f == 0 && !in_view)) ? f : fin[x];
             }
         }
         return;
