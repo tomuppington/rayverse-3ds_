@@ -316,10 +316,10 @@ bool status_panel_update(void) {
     static const s8 world_colours[7] = {5, 5, 3, 0, 2, 1, 1};
     s32 world = wi->world;
     if (world >= 1 && world <= 6) {
-        display_text(language_txt[23 + world], BOTTOM_W / 2, 26, 1, world_colours[world]);
+        display_text(language_txt[23 + world], BOTTOM_W / 2, 39, 1, world_colours[world]); // (centred in the space above the rest)
     }
     if (wi->text) {
-        display_text(wi->text, BOTTOM_W / 2, 48, 2, wi->color);
+        display_text(wi->text, BOTTOM_W / 2, 61, 2, wi->color);
     }
 
     // Cages of this part of the world: the medallion with its Electoons (as when a cage is freed).
