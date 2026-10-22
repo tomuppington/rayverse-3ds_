@@ -157,6 +157,12 @@ void bottom_rays_render_small(u32* out) {
 static u8 status_panel[BOTTOM_W * BOTTOM_H]; // colour indices of the game's palette (0: rays show through)
 static u32 status_panel_key = 0xFFFFFFFF;
 static u16 status_spin, status_pulse;
+// When a cage is freed, the panel's medallion plays the Electoon's arrival (its flash and twinkle, as on
+// the main screen), then rests: the animation frame being shown, or -1.
+#define STATUS_ARRIVAL_FIRST_FRAME 56 // (just before the flash: the Electoon arrives at about frame 60)
+static s32 status_anim_frame = -1;
+static s32 status_cages_shown = -1;  // cages shown last time, for this place on the map
+static s32 status_place_shown = -1;
 
 static obj_t* status_find_object(s16 type) {
     for (s32 i = 0; i < level.nb_objects; ++i) {
@@ -195,19 +201,81 @@ static s32 status_frame_width(obj_t* obj, anim_t* anim, s32 frame) {
     return x1 - x0;
 }
 
-// A frame of the medallion's animation where it is at rest (round, facing the screen). The resting
-// medallion is the narrowest frame; it starts widening when it opens near the end.
+// A frame of the medallion's animation where it is at rest (round, facing the screen, with the newest
+// Electoon in its place). The resting medallion is the narrowest frame; it starts widening when it
+// opens near the end. Some frames have a twinkle on an Electoon: of the last resting frames, the one
+// with the fewest near-white pixels is used.
+static s32 status_medal_rest_frame_find(obj_t* obj, anim_t* anim, bool before_electoon);
+
 static s32 status_medal_rest_frame(obj_t* obj, anim_t* anim, bool before_electoon) {
+    // (Cached: finding it draws several frames.)
+    static s16 cache[2][256];
+    static bool cache_ready;
+    static const anim_t* cache_animations;
+    if (!cache_ready || cache_animations != obj->animations) {
+        memset(cache, 0xFF, sizeof(cache));
+        cache_ready = true;
+        cache_animations = obj->animations;
+    }
+    s16* entry = &cache[before_electoon ? 1 : 0][obj->anim_index];
+    if (*entry < 0) *entry = (s16)status_medal_rest_frame_find(obj, anim, before_electoon);
+    return *entry;
+}
+
+static s32 status_medal_rest_frame_find(obj_t* obj, anim_t* anim, bool before_electoon) {
     s32 n = anim->frames_count;
     if (n <= 0) return 0;
-    if (before_electoon) return MIN(50, n - 1);
+    s32 last = n - 1, first;
     s32 rest_width = status_frame_width(obj, anim, MIN(50, n - 1));
-    for (s32 f = n / 2; f < n; ++f) {
-        if (status_frame_width(obj, anim, f) > rest_width + 1) {
-            return MAX(0, f - 10);
+    if (before_electoon) {
+        first = MIN(42, last); // (the halves have come together; the first Electoon arrives at about 60)
+        last = MIN(66, last);
+    } else {
+        for (s32 f = n / 2; f < n; ++f) {
+            if (status_frame_width(obj, anim, f) > rest_width + 1) {
+                last = MAX(0, f - 4);
+                break;
+            }
+        }
+        first = MAX(0, last - 30);
+    }
+    // Draw each candidate frame into a scratch picture and count its near-white pixels.
+    static u8 scratch[160 * 160];
+    const rgb_t* pal = rvb[current_pal_id].colors;
+    u8* saved_buffer = draw_buffer;
+    s32 saved_w = screen_width, saved_h = screen_height;
+    s32 cx0, cx1, cy0, cy1;
+    get_sprite_clipping(&cx0, &cx1, &cy0, &cy1);
+    screen_width = 160;
+    screen_height = 160;
+    draw_buffer = scratch;
+    sprite_clipping(0, 160, 0, 160);
+    s32 best = last, best_white = 0x7FFFFFFF;
+    for (s32 f = last; f >= first; --f) {
+        if (status_frame_width(obj, anim, f) > rest_width + 1) continue; // not closed yet / opening
+        obj_t m = *obj;
+        m.anim_frame = (u8)f;
+        s32 x0, y0, x1, y1;
+        status_frame_box(&m, anim, f, &x0, &y0, &x1, &y1);
+        m.screen_x = 80 - (x0 + x1) / 2;
+        m.screen_y = 80 - (y0 + y1) / 2;
+        memset(scratch, 0, sizeof(scratch));
+        display2(&m);
+        s32 white = 0;
+        for (s32 i = 0; i < 160 * 160; ++i) {
+            const rgb_t* c = pal + scratch[i];
+            if (scratch[i] && c->g > 180 && c->b > 200) ++white; // (white or pale blue: a twinkle)
+        }
+        if (white < best_white) {
+            best_white = white;
+            best = f;
         }
     }
-    return n - 1;
+    draw_buffer = saved_buffer;
+    screen_width = saved_w;
+    screen_height = saved_h;
+    sprite_clipping(cx0, cx1, cy0, cy1);
+    return best;
 }
 
 // Redraws the panel if anything on it changed. Returns true if it did.
@@ -218,8 +286,16 @@ bool status_panel_update(void) {
               ((u32)(status_bar.lives & 0x7F) << 15) | ((u32)status_bar.num_wiz << 22) |
               ((u32)(ray.hit_points & 7) << 29);
     key ^= (u32)status_bar.max_hitp * 0x9E3779B1u ^ (u32)language * 0x85EBCA6Bu ^ (u32)(num_world * 16 + num_level) * 0xC2B2AE35u;
-    if (key == status_panel_key || !sbar) return false;
+    if (!sbar) return false;
+    if (key == status_panel_key && status_anim_frame < 0) return false;
     status_panel_key = key;
+    // A cage was just freed here: play the arrival.
+    s32 cages_now = MIN(6, wi->nb_cages);
+    if (status_place_shown == num_world_choice && cages_now > status_cages_shown && cages_now > 0) {
+        status_anim_frame = STATUS_ARRIVAL_FIRST_FRAME;
+    }
+    status_place_shown = num_world_choice;
+    status_cages_shown = cages_now;
 
     // Draw with the game's routines into the panel: point the drawing at it for a moment.
     u8* saved_buffer = draw_buffer;
@@ -253,11 +329,16 @@ bool status_panel_update(void) {
         anim_t* anim = m.animations + m.anim_index;
         // The animation flies the medallion in, rests (while an Electoon joins), then opens and flies off.
         // Show it at rest: before the Electoon arrives for 0 cages, otherwise just before it opens.
-        m.anim_frame = (u8)status_medal_rest_frame(&m, anim, cages == 0);
-        m.flags.flip_x = 0;
-        m.scale = 256;
+        s32 rest = status_medal_rest_frame(&m, anim, cages == 0);
+        m.flags.flip_x = 0; // (keeps the object's own scale setting, 0: drawn as is, as in the level)
         s32 x0, y0, x1, y1;
-        status_frame_box(&m, anim, m.anim_frame, &x0, &y0, &x1, &y1);
+        status_frame_box(&m, anim, rest, &x0, &y0, &x1, &y1); // (placed by the resting medallion)
+        if (status_anim_frame >= 0 && status_anim_frame < rest) {
+            m.anim_frame = (u8)status_anim_frame++; // (one frame of the arrival per game frame, as in the level)
+        } else {
+            m.anim_frame = (u8)rest;
+            status_anim_frame = -1;
+        }
         m.screen_x = 92 - (x0 + x1) / 2; // centred on (92, 124)
         m.screen_y = 124 - (y0 + y1) / 2;
         display2(&m);
@@ -295,6 +376,7 @@ bool status_panel_update(void) {
 // Forget the panel (e.g. a new level), so that it is redrawn.
 void status_panel_reset(void) {
     status_panel_key = 0xFFFFFFFF;
+    status_anim_frame = -1;
 }
 
 // Draws the bottom screen during play (0x00RRGGBB, 320x240): the panel over dark, slow rays (computed

@@ -336,6 +336,7 @@ void ctr_advance_frame(app_state_t* app_state) {
         memcpy(headless_saved_palette, game->draw_palette.colors, sizeof(headless_saved_palette));
     }
     headless_render_rays(app_state);
+    if (getenv("STATUS_PANEL") && RaymanDansUneMapDuJeu && !bottom_menu_active()) status_panel_update(); // (every frame, as on the 3DS)
     headless_run_script(app_state);
     headless_flush_keys();
 
