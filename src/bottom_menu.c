@@ -287,7 +287,11 @@ bool status_panel_update(void) {
               ((u32)(ray.hit_points & 7) << 29);
     key ^= (u32)status_bar.max_hitp * 0x9E3779B1u ^ (u32)language * 0x85EBCA6Bu ^ (u32)(num_world * 16 + num_level) * 0xC2B2AE35u;
     if (!sbar) return false;
-    if (key == status_panel_key && status_anim_frame < 0) return false;
+    // (Redrawn every frame while the extra-life or power sparkle plays on the counters, and once after.)
+    static bool sparkle_shown;
+    bool sparkle = id_Cling_1up != -1 || id_Cling_Pow != -1;
+    if (key == status_panel_key && status_anim_frame < 0 && !sparkle && !sparkle_shown) return false;
+    sparkle_shown = sparkle;
     status_panel_key = key;
     // A cage was just freed here: play the arrival.
     s32 cages_now = MIN(6, wi->nb_cages);
@@ -356,6 +360,20 @@ bool status_panel_update(void) {
         if (status_bar.max_hitp == 4) {
             display_sprite_NoClip(sbar, 20 + status_bar.hp_sprites[0], sx + 43, sy + 22, 1);
         }
+    }
+    // The sparkle over the lives counter (extra life) or the hit points (power), placed as DISPLAY_CLING
+    // places it on the main screen's counters (whose Rayman head is at 16,5).
+    if (id_Cling_1up != -1 && level.objects[id_Cling_1up].timer == 0) {
+        obj_t c = level.objects[id_Cling_1up];
+        c.screen_x = sx + (61 - 16) - c.offset_bx;
+        c.screen_y = sy - c.offset_hy;
+        display2(&c);
+    }
+    if (id_Cling_Pow != -1 && level.objects[id_Cling_Pow].timer == 0) {
+        obj_t c = level.objects[id_Cling_Pow];
+        c.screen_x = sx + (66 - 16) - c.offset_bx;
+        c.screen_y = sy + 9 - c.offset_hy;
+        display2(&c);
     }
     s16 tx = 186, ty = 136;
     display_sprite_NoClip(sbar, 56, tx, ty, 1);
