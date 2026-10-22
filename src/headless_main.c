@@ -135,6 +135,7 @@ static void headless_save_bottom_menu(app_state_t* app_state, const char* name) 
 // Title-screen menus on two screens (MENU_RAYS=1): the top and bottom screen pictures, saved next to each
 // screenshot as name_rays.ppm and name_raysbottom.ppm.
 static u32 headless_rays[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+static u32 headless_bottom_level[320 * 240]; // STATUS_PANEL: the bottom screen during levels
 static u32 headless_rays_bottom[320 * 240];
 static u32 headless_rays_right[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL]; // 3D (STEREO_TEST): right eye
 static bool headless_rays_shown;
@@ -289,11 +290,8 @@ static void headless_run_script(app_state_t* app_state) {
         } else if (strcmp(e->kind, "shot") == 0) {
             headless_save_screenshot(app_state->active_surface, e->arg);
             if (bottom_menu_active()) headless_save_bottom_menu(app_state, e->arg);
-            if (getenv("STATUS_PANEL") && RaymanDansUneMapDuJeu && !bottom_menu_active()) {
-                static u32 panel[320 * 240];
-                status_panel_update();
-                status_panel_render(panel, app_state->game.draw_palette.colors);
-                headless_save_rgb(e->arg, "panel", panel, 320, 240);
+            if (getenv("STATUS_PANEL") && (RaymanDansUneMapDuJeu || bottom_menu_active())) {
+                headless_save_rgb(e->arg, "panel", headless_bottom_level, 320, 240);
             }
             if (headless_rays_shown) {
                 headless_save_rgb(e->arg, "rays", headless_rays, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL);
@@ -336,7 +334,11 @@ void ctr_advance_frame(app_state_t* app_state) {
         memcpy(headless_saved_palette, game->draw_palette.colors, sizeof(headless_saved_palette));
     }
     headless_render_rays(app_state);
-    if (getenv("STATUS_PANEL") && RaymanDansUneMapDuJeu && !bottom_menu_active()) status_panel_update(); // (every frame, as on the 3DS)
+    if (getenv("STATUS_PANEL") && (RaymanDansUneMapDuJeu || bottom_menu_active())) {
+        // the bottom screen during levels, every frame as on the 3DS
+        const u8* src = (draw_buffer && draw_buffer != app_state->game.draw_buffer.memory) ? draw_buffer : app_state->game.draw_buffer.memory;
+        bottom_level_render(headless_bottom_level, bottom_menu_active(), src, SCREEN_WIDTH, SCREEN_HEIGHT, app_state->game.draw_palette.colors);
+    }
     headless_run_script(app_state);
     headless_flush_keys();
 

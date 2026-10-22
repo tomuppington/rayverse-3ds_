@@ -152,7 +152,7 @@ void bottom_rays_render_small(u32* out) {
 // the whole game, over dark, slowly turning rays. Drawn with the game's own font and sprites.
 //
 // The panel is redrawn only when something on it changes (status_panel_update); every frame only the
-// rays move behind it (status_panel_render).
+// rays move behind it (bottom_level_render).
 
 static u8 status_panel[BOTTOM_W * BOTTOM_H]; // colour indices of the game's palette (0: rays show through)
 static u32 status_panel_key = 0xFFFFFFFF;
@@ -420,10 +420,120 @@ void status_panel_reset(void) {
     status_anim_frame = -1;
 }
 
-// Draws the bottom screen during play (0x00RRGGBB, 320x240): the panel over dark, slow rays (computed
-// at half resolution).
-void status_panel_render(u32* out, const rgb_t* palette) {
+// Bottom screen during levels: the status panel, which crossfades with the pause menu when the game is
+// paused (and back when it carries on), over dark, slowly turning rays that carry on throughout.
+#define PAUSE_FADE_STEPS 16                        // frames for the crossfade (about a quarter of a second)
+#define PAUSE_MENU_PIXEL (1u << 24)                // in pause_layer: a pixel of the menu (colour in the low bits)
+#define PAUSE_BOX_PIXEL  (1u << 25)                // in pause_layer: inside the menu's see-through box
+static u32 pause_layer[BOTTOM_W * BOTTOM_H];        // the pause menu as last seen (kept for fading it out)
+static bool pause_layer_valid;
+static s32 pause_fade;                              // the panel fading out: 0 (shown) ... PAUSE_FADE_STEPS (gone)
+static s32 menu_fade;                               // the pause menu fading in: 0 (none) ... PAUSE_FADE_STEPS (shown)
+static rgb_t panel_palette[256];                    // the level's colours (the menu changes them while paused)
+static bool panel_palette_valid;
+
+// Takes the pause menu from the game's picture (src, drawn over an empty picture, see DISPLAY_FOND_MENU),
+// centred on the bottom screen. The game dissolves its menu in and out (only some of its pixels drawn);
+// those frames are skipped, and the crossfade here is the transition instead: the menu is only taken
+// when it is complete (as many pixels as the most seen during this pause, in the same place).
+// Returns true if it was taken.
+static bool pause_layer_capture(const u8* src, s32 src_w, s32 src_h, const rgb_t* palette, bool new_pause) {
+    static s32 most_pixels, full_area, previous_pixels;
+    if (new_pause) {
+        most_pixels = 0;
+        full_area = 0;
+        previous_pixels = -1;
+    }
+    s32 min_x = src_w, max_x = -1, min_y = src_h, max_y = -1, pixels = 0;
+    for (s32 y = 0; y < src_h; ++y) {
+        const u8* row = src + y * src_w;
+        for (s32 x = 0; x < src_w; ++x) {
+            if (row[x]) {
+                ++pixels;
+                if (x < min_x) min_x = x;
+                if (x > max_x) max_x = x;
+                if (y < min_y) min_y = y;
+                if (y > max_y) max_y = y;
+            }
+        }
+    }
+    // While the menu dissolves in, the number of pixels keeps growing (with pauses of up to 4 frames):
+    // it is complete once that number has stayed the same for 6 frames.
+    static s32 steady_frames;
+    steady_frames = (pixels == previous_pixels) ? steady_frames + 1 : 0;
+    bool steady = steady_frames >= 5;
+    previous_pixels = pixels;
+    if (max_x < 0) return false;
+    s32 area = (max_x - min_x + 1) * (max_y - min_y + 1);
+    if (pixels > most_pixels) {
+        most_pixels = pixels;
+        full_area = area;
+    }
+    bool complete = steady && pixels >= most_pixels - most_pixels / 32 && area * 10 >= full_area * 9 && area * 10 <= full_area * 11;
+    if (!complete) return false;
+    s32 ox = (min_x + max_x + 1) / 2 - BOTTOM_W / 2;
+    s32 oy = (min_y + max_y + 1) / 2 - BOTTOM_H / 2;
+    for (s32 y = 0; y < BOTTOM_H; ++y) {
+        s32 sy = y + oy;
+        const u8* row = (sy >= 0 && sy < src_h) ? src + sy * src_w : NULL;
+        u32* o = pause_layer + y * BOTTOM_W;
+        for (s32 x = 0; x < BOTTOM_W; ++x) {
+            s32 sx = x + ox;
+            u8 p = (row && sx >= 0 && sx < src_w) ? row[sx] : 0;
+            if (p == 0) {
+                o[x] = 0;
+            } else if (p == BOTTOM_PANEL_COLOUR) {
+                o[x] = PAUSE_BOX_PIXEL;
+            } else {
+                rgb_t c = palette[p];
+                o[x] = PAUSE_MENU_PIXEL | ((u32)c.r << 16) | ((u32)c.g << 8) | c.b;
+            }
+        }
+    }
+    pause_layer_valid = true;
+    return true;
+}
+
+static inline u32 bottom_blend(u32 a, u32 b, u32 t) { // t/256 of b
+    u32 r = (((a >> 16) & 0xFF) * (256 - t) + ((b >> 16) & 0xFF) * t) >> 8;
+    u32 g = (((a >> 8) & 0xFF) * (256 - t) + ((b >> 8) & 0xFF) * t) >> 8;
+    u32 bl = ((a & 0xFF) * (256 - t) + (b & 0xFF) * t) >> 8;
+    return (r << 16) | (g << 8) | bl;
+}
+
+// Draws the bottom screen during a level (0x00RRGGBB, 320x240). 'paused': the pause menu is open, and src
+// (src_w x src_h) is the game's picture with the menu on it.
+void bottom_level_render(u32* out, bool paused, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette) {
     if (!bottom_tables_ready) bottom_menu_init_tables();
+    if (!paused) {
+        memcpy(panel_palette, palette, sizeof(panel_palette));
+        panel_palette_valid = true;
+    }
+    const rgb_t* pp = panel_palette_valid ? panel_palette : palette;
+    static bool was_paused, captured_this_pause;
+    static s32 paused_frames;
+    if (paused && src) {
+        if (!was_paused) {
+            captured_this_pause = false;
+            paused_frames = 0;
+        }
+        ++paused_frames;
+        if (pause_layer_capture(src, src_w, src_h, palette, !was_paused)) captured_this_pause = true;
+        // The panel and the menu crossfade once the game has finished drawing its menu (or after half a
+        // second, whatever happens).
+        if (captured_this_pause || paused_frames > 30) {
+            if (pause_fade < PAUSE_FADE_STEPS) ++pause_fade;
+            if (captured_this_pause && menu_fade < PAUSE_FADE_STEPS) ++menu_fade;
+        }
+    } else {
+        if (pause_fade > 0) --pause_fade;
+        if (menu_fade > 0) --menu_fade;
+    }
+    was_paused = paused;
+    status_panel_update(); // (redraws the panel only if something on it changed)
+    u32 panel_alpha = (u32)((PAUSE_FADE_STEPS - pause_fade) * 256 / PAUSE_FADE_STEPS);
+    u32 menu_alpha = pause_layer_valid ? (u32)(menu_fade * 256 / PAUSE_FADE_STEPS) : 0;
+
     s32 band = ((s32)(sinf((float)status_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
     const s32 outer = 200;
     static u16 brightness[256];
@@ -438,12 +548,27 @@ void status_panel_render(u32* out, const rgb_t* palette) {
         for (s32 x = 0; x < BOTTOM_W; x += 2) {
             s32 i = y * BOTTOM_W + x;
             u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
-            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]);
-            u32* o = out + i;
-            const u8* p = status_panel + i;
-            #define STATUS_PIXEL(k, off) { u8 q = p[off]; if (q) { rgb_t pc = palette[q]; o[off] = ((u32)pc.r << 16) | ((u32)pc.g << 8) | pc.b; } else o[off] = ray; }
-            STATUS_PIXEL(0, 0) STATUS_PIXEL(1, 1) STATUS_PIXEL(2, BOTTOM_W) STATUS_PIXEL(3, BOTTOM_W + 1)
-            #undef STATUS_PIXEL
+            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]); // (rays at half resolution)
+            static const s32 offs[4] = {0, 1, BOTTOM_W, BOTTOM_W + 1};
+            for (s32 k = 0; k < 4; ++k) {
+                s32 j = i + offs[k];
+                // The rays, then the panel (fading), then the pause menu (fading) on top.
+                u32 pixel = ray;
+                u8 q = status_panel[j];
+                if (q && panel_alpha) {
+                    rgb_t pc = pp[q];
+                    u32 c = ((u32)pc.r << 16) | ((u32)pc.g << 8) | pc.b;
+                    pixel = (panel_alpha >= 256) ? c : bottom_blend(pixel, c, panel_alpha);
+                }
+                if (menu_alpha) {
+                    u32 m = pause_layer[j];
+                    if (m) {
+                        u32 c = (m & PAUSE_MENU_PIXEL) ? (m & 0xFFFFFF) : menu_rays_darken_any(ray, 96);
+                        pixel = (menu_alpha >= 256) ? c : bottom_blend(pixel, c, menu_alpha);
+                    }
+                }
+                out[j] = pixel;
+            }
         }
     }
     status_spin += 4;
