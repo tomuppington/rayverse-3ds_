@@ -566,8 +566,8 @@ static inline u32 bottom_blend(u32 a, u32 b, u32 t) { // t/256 of b
     return (r << 16) | (g << 8) | bl;
 }
 
-#define RGB565(c) ((u16)((((c) >> 8) & 0xF800) | (((c) >> 5) & 0x07E0) | (((c) >> 3) & 0x001F)))
-#define RGB565_TO_888(p) ((((u32)(p) & 0xF800) << 8) | (((u32)(p) & 0x07E0) << 5) | (((u32)(p) & 0x001F) << 3))
+#define BOTTOM_RGB565(c) ((u16)((((c) >> 8) & 0xF800) | (((c) >> 5) & 0x07E0) | (((c) >> 3) & 0x001F)))
+#define BOTTOM_565_TO_888(p) ((((u32)(p) & 0xF800) << 8) | (((u32)(p) & 0x07E0) << 5) | (((u32)(p) & 0x001F) << 3))
 
 // The dark rays at half resolution, in the bottom screen's own pixel order (RGB565, column by column,
 // bottom to top: index x * 120 + (119 - y)). They turn a little every frame.
@@ -591,7 +591,7 @@ static void dark_rays_update(void) {
             s32 i = (2 * hy) * BOTTOM_W + 2 * hx;
             u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
             u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]);
-            col[119 - hy] = RGB565(ray);
+            col[119 - hy] = BOTTOM_RGB565(ray);
         }
     }
     status_spin += 4;
@@ -619,7 +619,7 @@ static void panel565_build(const rgb_t* pp) {
             } else {
                 opaque = false;
             }
-            col[BOTTOM_H - 1 - y] = RGB565(c);
+            col[BOTTOM_H - 1 - y] = BOTTOM_RGB565(c);
             mask[BOTTOM_H - 1 - y] = opaque;
         }
     }
@@ -707,10 +707,10 @@ void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src
         const u16* rc = dark_rays + (x >> 1) * 120;
         for (s32 fy = 0; fy < BOTTOM_H; ++fy) {
             s32 y = BOTTOM_H - 1 - fy;
-            u32 ray = RGB565_TO_888(rc[fy >> 1]);
+            u32 ray = BOTTOM_565_TO_888(rc[fy >> 1]);
             u32 pixel = ray;
             if (panel_alpha && pm[fy]) {
-                u32 c = RGB565_TO_888(pc[fy]);
+                u32 c = BOTTOM_565_TO_888(pc[fy]);
                 pixel = (panel_alpha >= 256) ? c : bottom_blend(pixel, c, panel_alpha);
             }
             if (menu_alpha) {
@@ -720,7 +720,7 @@ void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src
                     pixel = (menu_alpha >= 256) ? c : bottom_blend(pixel, c, menu_alpha);
                 }
             }
-            col[fy] = RGB565(pixel);
+            col[fy] = BOTTOM_RGB565(pixel);
         }
     }
 }
