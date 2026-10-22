@@ -259,6 +259,7 @@ static s16 ps1_music_world;
 static s16 ps1_music_level;
 static s16 ps1_music_cmd;
 static s16 ps1_excerpt_index;
+static bool ps1_scroll_locked_audio; // PS1_ScrollLockedAudio
 
 void ps1_music_init(void) {
     FILE* fp = fopen("MusicPS1/JUNGLE1.ogg", "rb");
@@ -335,6 +336,7 @@ void ps1_play_music(s16 world, s16 level) {
     ps1_music_world = world;
     ps1_music_level = level;
     ps1_music_cmd = -1;
+    ps1_scroll_locked_audio = false;
     MusicCdActive = true;
     ps1_music_run();
 }
@@ -342,6 +344,17 @@ void ps1_play_music(s16 world, s16 level) {
 // Called by play_ogg() when the current track or excerpt has finished.
 bool ps1_music_next_segment(void) {
     return ps1_music_run();
+}
+
+// Called every frame during a level. When the screen scroll locks (e.g. the flood in Tarayzan's
+// level, boss arenas), the PS1 switches to the level's second music section
+// (change_audio_track_puit in the PS1 code), once per level start.
+void ps1_music_update_in_level(void) {
+    if (scrollLocked && !ps1_scroll_locked_audio) {
+        ps1_scroll_locked_audio = true;
+        ps1_music_cmd = 1;
+        ps1_music_run();
+    }
 }
 
 // Moskito ride: the PS1 switches to faster music when the mosquito accelerates, and back.

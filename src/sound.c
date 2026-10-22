@@ -813,6 +813,7 @@ void TestCdLoop(void) {
             ps1_play_music(num_world, num_level);
             cdTime = 1;
         }
+        ps1_music_update_in_level();
         return;
     }
     if (cdTime != 0) {

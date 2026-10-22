@@ -18,6 +18,7 @@ void ps1_music_init(void);
 void ps1_play_music(s16 world, s16 level);
 bool ps1_music_next_segment(void);
 void ps1_music_moskito(bool accelerate);
+void ps1_music_update_in_level(void);
 
 // lowlevel.c
 void display_emptypicture(void);
