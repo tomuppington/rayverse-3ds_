@@ -283,11 +283,12 @@ static inline u32 menu_rays_darken(u32 c, u32 k) {
 static u16 menu_layer[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
 static u8 menu_layer_frame[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
 static bool menu_layer_valid;
+static bool menu_layer_on_map; // the last one was a question on the world map (see menu_map_dialog_active)
 
 static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 h, const rgb_t* palette, float strength);
 
 // Draws both screens for a title-screen menu (0x00RRGGBB, row by row):
-// - top (320x200, the game's picture size): the animated rays with the logo. For 3D (top_right not
+// - top (320x200, the game's picture size; not drawn if top is NULL): the animated rays with the logo. For 3D (top_right not
 //   NULL, strength = 3D slider), top gets the left eye's picture and top_right the right eye's: the
 //   rays deep behind the screen, the logo in front of it;
 // - bottom (320x240): the menu from the game's picture src (320x200, in the middle), over the rays.
@@ -301,6 +302,7 @@ void menu_rays_render(u32* top, u32* top_right, u32* bottom, const u8* src, s32 
     }
     memcpy(menu_layer_frame, src, n);
     menu_layer_valid = true;
+    menu_layer_on_map = dans_la_map_monde;
     menu_rays_compose(top, top_right, bottom, w, h, palette, strength);
 }
 
@@ -351,7 +353,7 @@ static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 
     // Top: rays (the middle 320x200 of the 320x240 tables) and the logo; in 3D once for each eye, each
     // layer sampled from x - shift.
     s32 tx = (BOTTOM_W - w) / 2, ty = (BOTTOM_H - h) / 2;
-    for (s32 eye = (top_right ? -1 : 0); eye <= (top_right ? 1 : 0); eye += 2) {
+    for (s32 eye = (top_right ? -1 : 0); top && eye <= (top_right ? 1 : 0); eye += 2) {
         u32* out = (eye > 0) ? top_right : top;
         s32 shift_rays = menu_rays_shift(MENU_RAYS_DEPTH, strength, eye);
         s32 shift_logo = menu_rays_shift(MENU_LOGO_DEPTH, strength, eye);
@@ -399,6 +401,19 @@ static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 
 
 // True when this frame is a title-screen menu to show this way (at the original picture size).
 bool menu_rays_active(void) {
-    return menu_rays_enabled && menu_rays_background && !OptionGame &&
+    return menu_rays_enabled && menu_rays_background && !OptionGame && !dans_la_map_monde &&
            SCREEN_WIDTH == SCREEN_WIDTH_ORIGINAL && SCREEN_HEIGHT == SCREEN_HEIGHT_ORIGINAL;
+}
+
+// True when this frame is a question on the world map (quit the game? / erase the saved game?): drawn
+// the same way as the title menus, over the map in black and white (menu_rays_background). The map
+// stays on the top screen and the question goes on the bottom screen, like the pause menu.
+bool menu_map_dialog_active(void) {
+    return menu_rays_enabled && menu_rays_background && !OptionGame && dans_la_map_monde &&
+           SCREEN_WIDTH == SCREEN_WIDTH_ORIGINAL && SCREEN_HEIGHT == SCREEN_HEIGHT_ORIGINAL;
+}
+
+// True if the last menu frame kept by menu_rays_holding was a question on the world map.
+bool menu_rays_held_on_map(void) {
+    return menu_layer_on_map;
 }

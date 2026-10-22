@@ -143,7 +143,14 @@ static void headless_render_rays(app_state_t* app_state) {
     game_state_t* game = &app_state->game;
     const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
     headless_rays_shown = menu_rays_active();
-    if (headless_rays_shown) {
+    bool map_dialog = !headless_rays_shown && menu_map_dialog_active();
+    if (map_dialog || (menu_rays_holding(src, SCREEN_WIDTH, SCREEN_HEIGHT) && menu_rays_held_on_map() && !headless_rays_shown)) {
+        // world map question: top = the map in black and white (EffetBufferNormal), bottom = the question
+        if (map_dialog) menu_rays_render(NULL, NULL, headless_rays_bottom, src, SCREEN_WIDTH, SCREEN_HEIGHT, game->draw_palette.colors, 0.0f);
+        else menu_rays_render_held(NULL, NULL, headless_rays_bottom, game->draw_palette.colors, 0.0f);
+        for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) { rgb_t c = game->draw_palette.colors[EffetBufferNormal[i]]; headless_rays[i] = ((u32)c.r << 16) | ((u32)c.g << 8) | c.b; }
+        headless_rays_shown = true;
+    } else if (headless_rays_shown) {
         menu_rays_render(headless_rays, getenv("STEREO_TEST") ? headless_rays_right : NULL, headless_rays_bottom, src, SCREEN_WIDTH, SCREEN_HEIGHT, game->draw_palette.colors, 1.0f);
     } else if (menu_rays_holding(src, SCREEN_WIDTH, SCREEN_HEIGHT)) {
         headless_rays_shown = true;

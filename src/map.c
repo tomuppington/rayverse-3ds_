@@ -125,11 +125,13 @@ void widescreen_level_start(void) {
     bool heavy_level = num_world == 1 && (num_level == 14 || num_level == 15);
     bool narrow_level = 16 * mp.width < SCREEN_WIDTH_MAX && 16 * mp.width >= SCREEN_WIDTH_ORIGINAL;
     play_window_boxed = false;
-    if (widescreen_enabled && GameModeVideo == MODE_NORMAL && !fairy_level && !strip_background &&
+    if (widescreen_enabled && GameModeVideo == MODE_NORMAL && !fairy_level &&
         16 * mp.height >= SCREEN_HEIGHT_MAX && (16 * mp.width >= SCREEN_WIDTH_MAX || narrow_level)) {
         w = SCREEN_WIDTH_MAX;
         h = SCREEN_HEIGHT_MAX;
-        play_window_boxed = heavy_level || narrow_level;
+        // (Levels whose background is made of vertical strips are laid out for 320 pixels across: they
+        // also get the 4:3 window.)
+        play_window_boxed = heavy_level || narrow_level || strip_background;
     }
     screen_width = w;
     screen_height = h;

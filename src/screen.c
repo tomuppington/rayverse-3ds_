@@ -126,7 +126,7 @@ void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
 }
 
 // 3DS port: how a background shorter than the screen is extended (see Display_Back_Screen).
-s32 bg_fill_mode = BG_FILL_REPEAT;
+s32 bg_fill_mode = BG_FILL_ZOOM; // (zoom keeps the picture's shape; see bg_fill_scale)
 s32 bg_rows_filled; // (for testing) rows the last frame had to fill
 
 // Scales the background rows first_row..last_row of the window (x1..x2, y1..y2) to cover all of its
@@ -261,27 +261,31 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
 
     } else {
         // type_scroll == 1
+        // (3DS port: in a 4:3 window, the strips are moved right by the width of the black side.)
+        s32 bx = play_window_border();
         s32 stride = plan0_stride;
         plan_width = (s16)stride; // (only used as the row length of the background buffer below)
         for (s32 i = 0; i < NbBande; ++i) {
             bande_t* bande = Bande + i;
             s16 v24_4 = plan_height - bande->field_6 - h1;
-            if (bande->offset + bande->length > w1 && bande->offset < w2) {
+            s32 off = bande->offset + bx;
+            u8* band_draw_pos = bande->draw_buffer_pos + bx;
+            if (off + bande->length > w1 && off < w2) {
                 if (bande->length != 0) {
                     s32 v67 = bande->length;
                     u8* source_buffer_pos = bande->source_buffer_pos + bande->field_6 * plan_width + h1 * plan_width;
-                    u8* dest_buffer_pos = bande->draw_buffer_pos + SCREEN_WIDTH * h1;
-                    if (bande->offset + bande->length <= w2) {
-                        if (bande->offset < w1) {
-                            source_buffer_pos += w1 - bande->offset;
-                            dest_buffer_pos += w1 - bande->offset;
-                            v67 = bande->length + bande->offset - w1;
+                    u8* dest_buffer_pos = band_draw_pos + SCREEN_WIDTH * h1;
+                    if (off + bande->length <= w2) {
+                        if (off < w1) {
+                            source_buffer_pos += w1 - off;
+                            dest_buffer_pos += w1 - off;
+                            v67 = bande->length + off - w1;
                         }
-                    } else if (bande->offset >= w1) {
-                        v67 = w2 - bande->offset;
+                    } else if (off >= w1) {
+                        v67 = w2 - off;
                     } else {
-                        source_buffer_pos += w1 - bande->offset;
-                        dest_buffer_pos += w1 - bande->offset;
+                        source_buffer_pos += w1 - off;
+                        dest_buffer_pos += w1 - off;
                         v67 = w2 - w1;
                     }
                     s32 v14 = h2 - h1;
@@ -296,12 +300,12 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                     } else {
                         Copy_Plan0_To_Buf(source_buffer_pos, dest_buffer_pos + BufferNormalDeplt, plan_width, v15, v67);
                         source_buffer_pos = bande->source_buffer_pos;
-                        dest_buffer_pos = bande->draw_buffer_pos + SCREEN_WIDTH * h1 + SCREEN_WIDTH * v15;
+                        dest_buffer_pos = band_draw_pos + SCREEN_WIDTH * h1 + SCREEN_WIDTH * v15;
                         v18 = v14 - v15;
                     }
-                    if (bande->offset < w1) {
-                        source_buffer_pos += w1 - bande->offset;
-                        dest_buffer_pos += w1 - bande->offset;
+                    if (off < w1) {
+                        source_buffer_pos += w1 - off;
+                        dest_buffer_pos += w1 - off;
                     }
                     if (v14 < v18) {
                         v18 = v14;
@@ -323,13 +327,13 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                 sprite_t* scroll_diff_sprite = ScrollDiffSprites->sprites + (i + 1);
                 if (source_y + scroll_diff_sprite->outer_height > h1) {
                     vec2b_t size = {scroll_diff_sprite->outer_width, scroll_diff_sprite->outer_height};
-                    DrawSpriteDiffNormal(sprite->x, source_y, size, Scroll_Masque[i + 1], draw_buffer,
+                    DrawSpriteDiffNormal(sprite->x + bx, source_y, size, Scroll_Masque[i + 1], draw_buffer,
                                          ScrollDiffSprites->img_buffer + scroll_diff_sprite->offset_in_atlas);
                 }
                 // Draw a second sprite further to the right if >1 fit on screen
                 if (source_y + plan_height < h2) {
                     vec2b_t size = {scroll_diff_sprite->outer_width, scroll_diff_sprite->outer_height};
-                    DrawSpriteDiffNormal(sprite->x, source_y + plan_height, size, Scroll_Masque[i + 1],
+                    DrawSpriteDiffNormal(sprite->x + bx, source_y + plan_height, size, Scroll_Masque[i + 1],
                                          draw_buffer,
                                          ScrollDiffSprites->img_buffer + scroll_diff_sprite->offset_in_atlas);
                 }

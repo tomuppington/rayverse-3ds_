@@ -552,10 +552,27 @@ static void ctr_present(app_state_t* app_state) {
     // Title-screen menus (bottom_menu.c): the title over animated rays on the top screen, the menu on
     // the bottom screen. Flat, so in 3D the same picture goes to both eyes.
     bool title_menu = !menu_below && menu_rays_active() && src_w == SCREEN_WIDTH_ORIGINAL && src_h == SCREEN_HEIGHT_ORIGINAL;
+    // A question on the world map: the map (in black and white) stays on the top screen, the question
+    // goes on the bottom screen.
+    bool map_dialog = !menu_below && !title_menu && menu_map_dialog_active() && src_w == SCREEN_WIDTH_ORIGINAL && src_h == SCREEN_HEIGHT_ORIGINAL;
     // (Frames where the game shows the last menu picture again, e.g. fading it out: shown the same way.)
-    bool title_menu_held = !menu_below && !title_menu && menu_rays_holding(src, src_w, src_h);
+    bool menu_held = !menu_below && !title_menu && !map_dialog && menu_rays_holding(src, src_w, src_h);
+    bool map_dialog_held = menu_held && menu_rays_held_on_map();
+    bool title_menu_held = menu_held && !map_dialog_held;
 
-    if (title_menu || title_menu_held) {
+    if (map_dialog || map_dialog_held) {
+        if (map_dialog) {
+            menu_rays_render(NULL, NULL, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors, 0.0f);
+        } else {
+            menu_rays_render_held(NULL, NULL, ctr_bottom_picture, game->draw_palette.colors, 0.0f);
+        }
+        // (The black and white map picture: menu_rays_background, which is EffetBufferNormal.)
+        u8* left = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
+        ctr_scale_to_fb(EffetBufferNormal, src_w, src_h, pal, left);
+        if (ctr_stereo_on) {
+            memcpy(gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL), left, ctr_fb_w * CTR_TOP_H * 3);
+        }
+    } else if (title_menu || title_menu_held) {
         // In 3D: the logo in front of the screen, the rays behind it (one picture for each eye).
         static u32 top_picture[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
         static u32 top_picture_right[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
@@ -601,7 +618,7 @@ static void ctr_present(app_state_t* app_state) {
 
     if (menu_below) {
         ctr_draw_bottom_menu(game_src, game_w, game_h, game->draw_palette.colors);
-    } else if (title_menu || title_menu_held) {
+    } else if (title_menu || title_menu_held || map_dialog || map_dialog_held) {
         ctr_draw_bottom_picture();
     } else if (!ctr_show_stats) {
         ctr_draw_bottom_rays();
