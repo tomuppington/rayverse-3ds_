@@ -22,13 +22,13 @@
 // negative = in front of it).
 //  - In levels the gameplay layer pops out of the screen, the background sits deep behind it, and the
 //    HUD floats just in front of the gameplay so it never looks buried.
-//  - On the world map (the binoculars screen) the black binocular frame is in front, Rayman, the paths
-//    and the level dots are at the screen, and the map itself is deep behind.
+//  - On the world map (the binoculars screen) only the black binocular frame and the names come forward;
+//    everything seen through the binoculars stays at the screen.
 typedef struct stereo_depths_t {
     float back, main, front;
 } stereo_depths_t;
 static const stereo_depths_t stereo_depths_level = { 3.0f, -1.5f, -2.5f };
-static const stereo_depths_t stereo_depths_map   = { 3.0f,  0.0f, -2.0f };
+static const stereo_depths_t stereo_depths_map   = { 0.0f,  0.0f, -2.0f };
 
 enum { STEREO_SCENE_LEVEL, STEREO_SCENE_MAP };
 
@@ -90,9 +90,9 @@ static void stereo_align_from_jumelle(u8* dst, const u8* work) {
 
 // World map: called after the map picture has been drawn (into the binoculars' work buffer).
 void stereo_capture_map_background(void) {
-    stereo_capture_background();
-    if (!stereo_have_back) return;
-    stereo_align_from_jumelle(stereo_layer_back, draw_buffer);
+    // Only the frame comes forward, so no background snapshot or pixel recording is needed.
+    if (!draw_buffer || !stereo_wanted) return;
+    stereo_have_back = true;
     stereo_scene = STEREO_SCENE_MAP;
 }
 
@@ -102,11 +102,7 @@ void stereo_capture_before_hud(void) {
     if (!draw_buffer || !stereo_have_back) return;
     if (stereo_scene == STEREO_SCENE_MAP) {
         // World map: work buffer and recorded pixels to screen positions (see stereo_align_from_jumelle).
-        static u8 drawn_work[sizeof(stereo_drawn)];
         stereo_align_from_jumelle(stereo_layer_main, draw_buffer);
-        memcpy(drawn_work, stereo_drawn, STEREO_W * STEREO_H);
-        stereo_align_from_jumelle(stereo_drawn, drawn_work);
-        stereo_mark_buffer = NULL; // the frame and names are drawn elsewhere
     } else {
         memcpy(stereo_layer_main, draw_buffer, STEREO_W * STEREO_H);
     }
@@ -186,24 +182,16 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
     s32 x_hi = MIN(STEREO_W, STEREO_W + min_shift);
 
     if (stereo_scene == STEREO_SCENE_MAP) {
-        // World map: the game only draws the map picture around the binoculars, so outside them all
-        // three layers are black. Black there must stay part of the (front) frame, or bits of the
-        // map's edge would show through when the layers are shifted.
+        // World map: a pixel is part of the frame (or the names) if it is black or differs from what the
+        // binoculars show there; the frame is shifted, everything seen through it is not.
         for (s32 y = 0; y < STEREO_H; ++y) {
             const u8* fin  = final_frame + y * STEREO_W;
             const u8* main = stereo_layer_main + y * STEREO_W;
-            const u8* back = stereo_layer_back + y * STEREO_W;
-            const u8* drawn = stereo_drawn + y * STEREO_W;
             u8* dst = out + y * STEREO_W;
             for (s32 x = 0; x < STEREO_W; ++x) {
                 s32 xf = stereo_clamp_x(x - shift_front);
-                s32 xm = stereo_clamp_x(x - shift_main);
                 u8 f = fin[xf];
-                if (f != main[xf] || (f == 0 && back[xf] == 0)) {
-                    dst[x] = f;
-                } else {
-                    dst[x] = (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
-                }
+                dst[x] = (f == 0 || f != main[xf]) ? f : fin[x];
             }
         }
         return;
