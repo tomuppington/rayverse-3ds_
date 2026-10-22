@@ -966,7 +966,19 @@ void TEST_SIGNPOST(void) {
         start_cd_gagne(); // play win music (nullsub on PC/Android)
     } else if (ray.main_etat == 3 && (ray.sub_etat == 23 || ray.sub_etat == 7)) { //NOTE: 53 instead of 7 in PS1 version
         //TODO: something weird going on here with condition (fin_boss && num_world  == 6) ??
-        if (EOA(&ray))  {
+        // 3DS port: with the PS1 soundtrack, the level ends once its fanfare has finished (at most about
+        // 8 seconds after the dance), Rayman holding the last pose of his dance meanwhile.
+        static s32 jingle_wait;
+        bool dance_over = jingle_wait > 0 || EOA(&ray);
+        if (dance_over && ps1_victory_jingle_playing() && jingle_wait < 300) {
+            ++jingle_wait;
+            ray_anim_held = true;
+            ray.speed_x = 0;
+            ray.speed_y = 0;
+            decalage_en_cours = 0;
+        } else if (dance_over)  {
+            jingle_wait = 0;
+            ray_anim_held = false;
             DO_FADE_OUT(); // added in PC version
             ChangeLevel();
             gele = 0;
@@ -993,7 +1005,15 @@ void TEST_SIGNPOST(void) {
         ray.speed_x = 0;
         ray.speed_y = 0;
         if (ray.sub_etat == 14) {
-            if (EOA(&ray)) {
+            // (3DS port: as above, waiting for the PS1 fanfare.)
+            static s32 jingle_wait_moskito;
+            bool dance_over = jingle_wait_moskito > 0 || EOA(&ray);
+            if (dance_over && ps1_victory_jingle_playing() && jingle_wait_moskito < 300) {
+                ++jingle_wait_moskito;
+                ray_anim_held = true;
+            } else if (dance_over) {
+                jingle_wait_moskito = 0;
+                ray_anim_held = false;
                 ChangeLevel();
                 gele = 0;
             }

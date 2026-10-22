@@ -437,6 +437,14 @@ void ps1_music_boss_beaten(void) {
     ps1_victory_delay = 30;
 }
 
+// True while the level-won fanfare (GAGNE) is still to come or still playing: the end of a level waits
+// for it (3DS port), instead of cutting it off when Rayman's victory dance ends.
+bool ps1_victory_jingle_playing(void) {
+    if (!ps1_music_enabled) return false;
+    if (ps1_victory_delay > 0) return true;
+    return ps1_music_world == 0 && ps1_music_level == 0 && is_ogg_playing && ogg_cd_track.decoder;
+}
+
 // Boss beaten: the PS1 fades the music out over 90 frames (FUN_80131e40 / PS1_Music_Apply_Fade).
 void ps1_music_fade_out(void) {
     if (ogg_cd_track.decoder && ogg_cd_track.fade_out_total == 0) {

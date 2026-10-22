@@ -38,6 +38,8 @@ void ps1_music_level_attempt_start(void);
 void ps1_music_seed_planted(void);
 void ps1_music_fade_out(void);
 void ps1_music_boss_beaten(void);
+bool ps1_victory_jingle_playing(void);
+extern bool ray_anim_held;
 // stereo.c
 void stereo_capture_background(void);
 void stereo_capture_map_background(void);

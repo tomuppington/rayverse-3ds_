@@ -542,7 +542,12 @@ void freezeAnim(obj_t* obj, u8 a2) {
 }
 
 //567AC
+// 3DS port: set while the end of a level waits for the PS1 fanfare (see objupdate.c): Rayman keeps the
+// last frame of his victory dance instead of moving on to his next state.
+bool ray_anim_held;
+
 void DO_ANIM(obj_t* obj) {
+    if (ray_anim_held && obj == &ray) return;
     s32 prev_anim_frame = obj->anim_frame;
     s32 prev_anim_index = obj->anim_index;
     eta_t* eta = get_eta(obj);

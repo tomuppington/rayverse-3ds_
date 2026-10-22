@@ -392,6 +392,7 @@ bool status_panel_update(void) {
               ((u32)(status_bar.lives & 0x7F) << 15) | ((u32)status_bar.num_wiz << 22) |
               ((u32)(ray.hit_points & 7) << 29);
     key ^= (u32)status_bar.max_hitp * 0x9E3779B1u ^ (u32)language * 0x85EBCA6Bu ^ (u32)(num_world * 16 + num_level) * 0xC2B2AE35u;
+    key ^= (u32)(current_pal_id + 1) * 0x27D4EB2Fu; // (the level's palette, for the panel's colours)
     if (!sbar) return false;
     // Redrawn every frame while the extra-life or power sparkle plays on the counters, or while a freed
     // cage's medallion is on the main screen (the panel's medallion follows it), and once after.
@@ -602,11 +603,28 @@ static inline u32 bottom_blend(u32 a, u32 b, u32 t) { // t/256 of b
 #define BOTTOM_565_TO_888(p) ((((u32)(p) & 0xF800) << 8) | (((u32)(p) & 0x07E0) << 5) | (((u32)(p) & 0x001F) << 3))
 
 // The dark rays at half resolution, in the bottom screen's own pixel order (RGB565, column by column,
-// bottom to top: index x * 120 + (119 - y)). They turn a little every frame.
+// bottom to top: index x * 120 + (119 - y)). They turn slowly; worked out every other frame, from tables
+// of each half-resolution pixel's angle and distance kept in that same order (so that the work reads
+// memory in order).
 static u16 dark_rays[160 * 120];
+static u16 dark_angle[160 * 120];
+static u8 dark_radius[160 * 120];
+static bool dark_tables_ready;
 
 static void dark_rays_update(void) {
     if (!bottom_tables_ready) bottom_menu_init_tables();
+    if (!dark_tables_ready) {
+        for (s32 hx = 0; hx < 160; ++hx) {
+            for (s32 hy = 0; hy < 120; ++hy) {
+                s32 i = (2 * hy) * BOTTOM_W + 2 * hx;
+                dark_angle[hx * 120 + 119 - hy] = bottom_angle[i];
+                dark_radius[hx * 120 + 119 - hy] = bottom_radius[i];
+            }
+        }
+        dark_tables_ready = true;
+    }
+    static u32 frame;
+    if ((frame++ & 1) != 0) return; // (every other frame)
     s32 band = ((s32)(sinf((float)status_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
     const s32 outer = 200;
     static u16 brightness[256];
@@ -617,42 +635,47 @@ static void dark_rays_update(void) {
         else k = 0;
         brightness[r] = (u16)(k * 90 >> 8); // dark: about a third of the menus' brightness
     }
-    for (s32 hx = 0; hx < 160; ++hx) {
-        u16* col = dark_rays + hx * 120;
-        for (s32 hy = 0; hy < 120; ++hy) {
-            s32 i = (2 * hy) * BOTTOM_W + 2 * hx;
-            u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
-            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]);
-            col[119 - hy] = BOTTOM_RGB565(ray);
-        }
+    for (s32 i = 0; i < 160 * 120; ++i) {
+        u32 c = bottom_wedge_colour[(u16)(dark_angle[i] - status_spin) & 1023];
+        dark_rays[i] = BOTTOM_RGB565(menu_rays_darken_any(c, brightness[dark_radius[i]]));
     }
-    status_spin += 4;
-    status_pulse += 4;
+    status_spin += 8;
+    status_pulse += 8;
 }
 
-// The panel in the bottom screen's pixel order (with a mask of its pixels), rebuilt when the panel or
-// its colours change, so that most frames only have to choose between it and the rays.
+// The panel in the bottom screen's pixel order (with a mask of its pixels), rebuilt only when the panel
+// is redrawn, so that most frames only have to choose between it and the rays. Its colours are the
+// level's own palette as it was then: the game's palette effects (lightning, colour cycling, fades, the
+// story pictures' own palettes) don't touch the panel.
 static u16 panel565[BOTTOM_W * BOTTOM_H];
 static u8 panel565_mask[BOTTOM_W * BOTTOM_H];
 
 static void panel565_build(const rgb_t* pp) {
-    for (s32 x = 0; x < BOTTOM_W; ++x) {
-        u16* col = panel565 + x * BOTTOM_H;
-        u8* mask = panel565_mask + x * BOTTOM_H;
-        for (s32 y = 0; y < BOTTOM_H; ++y) {
-            s32 j = y * BOTTOM_W + x;
-            u8 q = status_panel[j];
-            u32 c = 0;
-            bool opaque = true;
-            if (q) {
-                c = ((u32)pp[q].r << 16) | ((u32)pp[q].g << 8) | pp[q].b;
-            } else if (status_medal_rgb[j]) {
-                c = status_medal_rgb[j] & 0xFFFFFF;
-            } else {
-                opaque = false;
+    static u16 pal565[256];
+    for (s32 i = 0; i < 256; ++i) {
+        pal565[i] = BOTTOM_RGB565(((u32)pp[i].r << 16) | ((u32)pp[i].g << 8) | pp[i].b);
+    }
+    // In 8x8 blocks, so that reading rows and writing columns both stay in the cache.
+    for (s32 bx = 0; bx < BOTTOM_W; bx += 8) {
+        for (s32 by = 0; by < BOTTOM_H; by += 8) {
+            for (s32 x = bx; x < bx + 8; ++x) {
+                u16* col = panel565 + x * BOTTOM_H;
+                u8* mask = panel565_mask + x * BOTTOM_H;
+                for (s32 y = by; y < by + 8; ++y) {
+                    s32 j = y * BOTTOM_W + x;
+                    u8 q = status_panel[j];
+                    s32 fy = BOTTOM_H - 1 - y;
+                    if (q) {
+                        col[fy] = pal565[q];
+                        mask[fy] = 1;
+                    } else if (status_medal_rgb[j]) {
+                        col[fy] = BOTTOM_RGB565(status_medal_rgb[j] & 0xFFFFFF);
+                        mask[fy] = 1;
+                    } else {
+                        mask[fy] = 0;
+                    }
+                }
             }
-            col[BOTTOM_H - 1 - y] = BOTTOM_RGB565(c);
-            mask[BOTTOM_H - 1 - y] = opaque;
         }
     }
 }
@@ -707,14 +730,10 @@ void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src
     }
     was_paused = paused;
 
-    // The panel (redrawn only if something on it changed) in the screen's order.
-    bool redrawn = status_panel_update();
-    static rgb_t built_palette[256];
-    static bool built;
-    if (redrawn || !built || memcmp(built_palette, pp, sizeof(built_palette)) != 0) {
-        panel565_build(pp);
-        memcpy(built_palette, pp, sizeof(built_palette));
-        built = true;
+    // The panel (redrawn only if something on it changed) in the screen's order, in the level's colours.
+    (void)pp;
+    if (status_panel_update()) {
+        panel565_build(rvb[current_pal_id].colors);
     }
     dark_rays_update();
 
@@ -966,26 +985,34 @@ static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 
         brightness[r] = (u16)(k * fade >> 8);
     }
 
-    // Top: rays (the middle 320x200 of the 320x240 tables) and the logo; in 3D once for each eye, each
-    // layer sampled from x - shift.
+    // The rays, worked out once for the whole bottom screen; the top screen shows their middle 320x200
+    // (shifted for each eye in 3D), so both eyes and both screens share the same work.
+    static u32 rays[BOTTOM_W * BOTTOM_H];
+    for (s32 i = 0; i < BOTTOM_W * BOTTOM_H; ++i) {
+        u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - bottom_spin) & 1023];
+        rays[i] = menu_rays_darken(c, brightness[bottom_radius[i]]);
+    }
+
+    // Top: rays and the logo; in 3D once for each eye, each layer sampled from x - shift.
     s32 tx = (BOTTOM_W - w) / 2, ty = (BOTTOM_H - h) / 2;
     for (s32 eye = (top_right ? -1 : 0); top && eye <= (top_right ? 1 : 0); eye += 2) {
         u32* out = (eye > 0) ? top_right : top;
         s32 shift_rays = menu_rays_shift(MENU_RAYS_DEPTH, strength, eye);
         s32 shift_logo = menu_rays_shift(MENU_LOGO_DEPTH, strength, eye);
         for (s32 y = 0; y < h; ++y) {
-            s32 ti = (y + ty) * BOTTOM_W + tx;
+            const u32* rr = rays + (y + ty) * BOTTOM_W + tx;
             const u32* ov = menu_top_overlay + y * w;
             u32* o = out + y * w;
             for (s32 x = 0; x < w; ++x) {
-                s32 lx = x - shift_logo;
-                u32 lc = (menu_top_overlay_ready && lx >= 0 && lx < w) ? ov[lx] : 0;
-                if (lc) {
-                    o[x] = menu_rays_darken(lc, fade);
-                } else {
-                    s32 rx = MAX(0, MIN(w - 1, x - shift_rays));
-                    u32 c = bottom_wedge_colour[(u16)(bottom_angle[ti + rx] - bottom_spin) & 1023];
-                    o[x] = menu_rays_darken(c, brightness[bottom_radius[ti + rx]]);
+                s32 rx = x - shift_rays;
+                rx = rx < 0 ? 0 : (rx >= w ? w - 1 : rx);
+                o[x] = rr[rx];
+            }
+            if (menu_top_overlay_ready) {
+                s32 x0 = MAX(0, shift_logo), x1 = MIN(w, w + shift_logo);
+                for (s32 x = x0; x < x1; ++x) {
+                    u32 lc = ov[x - shift_logo];
+                    if (lc) o[x] = (fade >= 256) ? (lc & 0xFFFFFF) : menu_rays_darken(lc, fade);
                 }
             }
         }
@@ -993,21 +1020,15 @@ static void menu_rays_compose(u32* top, u32* top_right, u32* bottom, s32 w, s32 
     }
 
     // Bottom: the menu, in the middle, over the rays.
-    for (s32 y = 0; y < BOTTOM_H; ++y) {
-        s32 sy = y - ty;
-        bool in = sy >= 0 && sy < h;
+    memcpy(bottom, rays, sizeof(rays));
+    for (s32 sy = 0; sy < h; ++sy) {
         const u16* layer_row = menu_layer + sy * w;
-        u32* o = bottom + y * BOTTOM_W;
-        for (s32 x = 0; x < BOTTOM_W; ++x) {
-            s32 sx = x - tx;
-            u16 m = (in && sx >= 0 && sx < w) ? layer_row[sx] : 0;
+        u32* o = bottom + (sy + ty) * BOTTOM_W + tx;
+        for (s32 sx = 0; sx < w; ++sx) {
+            u16 m = layer_row[sx];
             if (m) {
                 rgb_t c = palette[m & 0xFF];
-                o[x] = ((u32)c.r << 16) | ((u32)c.g << 8) | c.b;
-            } else {
-                s32 i = y * BOTTOM_W + x;
-                u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - bottom_spin) & 1023];
-                o[x] = menu_rays_darken(c, brightness[bottom_radius[i]]);
+                o[sx] = ((u32)c.r << 16) | ((u32)c.g << 8) | c.b;
             }
         }
     }

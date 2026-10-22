@@ -462,11 +462,17 @@ static void ctr_draw_bottom_picture(void) {
     // The bottom screen's framebuffer (RGB565, set up by the text console) is stored rotated like the
     // top one: column by column, bottom to top.
     u16* fb = (u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
-    for (s32 x = 0; x < 320; ++x) {
-        u16* col = fb + x * 240;
-        for (s32 y = 0; y < 240; ++y) {
-            u32 c = picture[y * 320 + x];
-            col[239 - y] = (u16)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F));
+    // (In 8x8 blocks, so that reading rows and writing columns both stay in the cache.)
+    for (s32 bx = 0; bx < 320; bx += 8) {
+        for (s32 by = 0; by < 240; by += 8) {
+            for (s32 x = bx; x < bx + 8; ++x) {
+                u16* col = fb + x * 240;
+                const u32* p = picture + x;
+                for (s32 y = by; y < by + 8; ++y) {
+                    u32 c = p[y * 320];
+                    col[239 - y] = (u16)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F));
+                }
+            }
         }
     }
     ctr_bottom_menu_shown = true;
