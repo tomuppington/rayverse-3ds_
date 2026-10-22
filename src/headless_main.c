@@ -294,5 +294,6 @@ int main(int argc, char** argv) {
     }
     app_state->running = true;
     widescreen_enabled = getenv("WIDESCREEN") != NULL; // test the wide view (3DS display option)
+    stereo_wanted = getenv("STEREO_TEST") != NULL; // record 3D layers for the anaglyph test pictures
     return main_Ray(argc, argv);
 }

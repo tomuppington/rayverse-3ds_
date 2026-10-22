@@ -396,6 +396,7 @@ static void ctr_present(app_state_t* app_state) {
 
     float slider = osGet3DSliderState();
     ctr_stereo_on = slider > 0.05f;
+    stereo_wanted = ctr_stereo_on; // record 3D layers in the next frames only while the slider is up
     if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h ||
         ctr_stereo_configured != ctr_stereo_on) {
         ctr_setup_display_mode(src_w, src_h);

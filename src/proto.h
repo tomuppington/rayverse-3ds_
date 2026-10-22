@@ -30,6 +30,7 @@ void ps1_music_fade_out(void);
 // stereo.c
 void stereo_capture_background(void);
 void stereo_capture_map_background(void);
+extern bool stereo_wanted;
 void stereo_capture_before_hud(void);
 bool stereo_frame_has_layers(void);
 void stereo_end_frame(void);
