@@ -68,9 +68,31 @@ void stereo_capture_background(void) {
     stereo_scene = STEREO_SCENE_LEVEL;
 }
 
+// World map: the binoculars' work buffer (EffetBufferNormal) is not laid out like the screen: its top-left
+// pixel is the screen's (JumelleXMin, JumelleYMin), and only the binoculars' box (LargeurJumelle x
+// HauteurJumelle) is drawn. This copies it into screen positions (black elsewhere), so the layers can be
+// compared with the final picture pixel by pixel.
+static void stereo_align_from_jumelle(u8* dst, const u8* work) {
+    for (s32 y = 0; y < STEREO_H; ++y) {
+        u8* d = dst + y * STEREO_W;
+        s32 sy = y - JumelleYMin;
+        if (sy < 0 || sy >= HauteurJumelle || sy >= STEREO_H) {
+            memset(d, 0, STEREO_W);
+            continue;
+        }
+        const u8* s = work + sy * STEREO_W;
+        for (s32 x = 0; x < STEREO_W; ++x) {
+            s32 sx = x - JumelleXMin;
+            d[x] = (sx >= 0 && sx < LargeurJumelle && sx < STEREO_W) ? s[sx] : 0;
+        }
+    }
+}
+
 // World map: called after the map picture has been drawn (into the binoculars' work buffer).
 void stereo_capture_map_background(void) {
     stereo_capture_background();
+    if (!stereo_have_back) return;
+    stereo_align_from_jumelle(stereo_layer_back, draw_buffer);
     stereo_scene = STEREO_SCENE_MAP;
 }
 
@@ -78,7 +100,16 @@ void stereo_capture_map_background(void) {
 // the level dots, before the binocular frame and the level names).
 void stereo_capture_before_hud(void) {
     if (!draw_buffer || !stereo_have_back) return;
-    memcpy(stereo_layer_main, draw_buffer, STEREO_W * STEREO_H);
+    if (stereo_scene == STEREO_SCENE_MAP) {
+        // World map: work buffer and recorded pixels to screen positions (see stereo_align_from_jumelle).
+        static u8 drawn_work[sizeof(stereo_drawn)];
+        stereo_align_from_jumelle(stereo_layer_main, draw_buffer);
+        memcpy(drawn_work, stereo_drawn, STEREO_W * STEREO_H);
+        stereo_align_from_jumelle(stereo_drawn, drawn_work);
+        stereo_mark_buffer = NULL; // the frame and names are drawn elsewhere
+    } else {
+        memcpy(stereo_layer_main, draw_buffer, STEREO_W * STEREO_H);
+    }
     stereo_have_main = true;
     stereo_mark_bits = 2; // what is drawn from now on (HUD, text) is the front layer
 }
