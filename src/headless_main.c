@@ -136,6 +136,7 @@ static void headless_save_bottom_menu(app_state_t* app_state, const char* name) 
 // screenshot as name_rays.ppm and name_raysbottom.ppm.
 static u32 headless_rays[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
 static u32 headless_bottom_level[320 * 240]; // STATUS_PANEL: the bottom screen during levels
+static u16 headless_bottom_fb[320 * 240];    // (as the 3DS framebuffer: RGB565, column by column, bottom to top)
 static u32 headless_rays_bottom[320 * 240];
 static u32 headless_rays_right[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL]; // 3D (STEREO_TEST): right eye
 static bool headless_rays_shown;
@@ -290,7 +291,7 @@ static void headless_run_script(app_state_t* app_state) {
         } else if (strcmp(e->kind, "shot") == 0) {
             headless_save_screenshot(app_state->active_surface, e->arg);
             if (bottom_menu_active()) headless_save_bottom_menu(app_state, e->arg);
-            if (getenv("STATUS_PANEL") && (RaymanDansUneMapDuJeu || bottom_menu_active())) {
+            if (getenv("STATUS_PANEL")) {
                 headless_save_rgb(e->arg, "panel", headless_bottom_level, 320, 240);
             }
             if (headless_rays_shown) {
@@ -337,7 +338,15 @@ void ctr_advance_frame(app_state_t* app_state) {
     if (getenv("STATUS_PANEL") && (RaymanDansUneMapDuJeu || bottom_menu_active())) {
         // the bottom screen during levels, every frame as on the 3DS
         const u8* src = (draw_buffer && draw_buffer != app_state->game.draw_buffer.memory) ? draw_buffer : app_state->game.draw_buffer.memory;
-        bottom_level_render(headless_bottom_level, bottom_menu_active(), src, SCREEN_WIDTH, SCREEN_HEIGHT, app_state->game.draw_palette.colors);
+        bottom_level_render(headless_bottom_fb, bottom_menu_active(), src, SCREEN_WIDTH, SCREEN_HEIGHT, app_state->game.draw_palette.colors);
+    } else if (getenv("STATUS_PANEL")) {
+        bottom_idle_render(headless_bottom_fb);
+    }
+    if (getenv("STATUS_PANEL")) {
+        for (s32 x = 0; x < 320; ++x) for (s32 y = 0; y < 240; ++y) {
+            u16 p = headless_bottom_fb[x * 240 + 239 - y];
+            headless_bottom_level[y * 320 + x] = (((u32)p & 0xF800) << 8) | (((u32)p & 0x07E0) << 5) | (((u32)p & 0x001F) << 3);
+        }
     }
     headless_run_script(app_state);
     headless_flush_keys();

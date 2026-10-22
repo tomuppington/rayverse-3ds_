@@ -583,6 +583,12 @@ void PlaySnd(s16 snd, s16 obj_id) {
                     tone = hard_sound_table[53].tone;
                     note = hard_sound_table[53].note;
                 } else {
+                    // Betilla's fist bringing her text on screen. Fixed (3DS port): as in the PS1 code, the
+                    // recording also comes from entry 0, which has none, so this whoosh is silent. Only the
+                    // note was taken from entry 0 (note 0), which played sound 53's recording at about 470 Hz:
+                    // a 6-second low ring, overlapping for each line of her text.
+                    prog = hard_sound_table[0].prog;
+                    tone = hard_sound_table[0].tone;
                     note = hard_sound_table[0].note;
                 }
                 break;

@@ -617,13 +617,17 @@ static void ctr_present(app_state_t* app_state) {
     stereo_end_frame();
 
     if (menu_below || (!ctr_show_stats && RaymanDansUneMapDuJeu)) {
-        // In a level: the status panel, crossfading with the pause menu (bottom_menu.c).
-        bottom_level_render(ctr_bottom_picture, menu_below, game_src, game_w, game_h, game->draw_palette.colors);
-        ctr_draw_bottom_picture();
+        // In a level: the status panel, crossfading with the pause menu (bottom_menu.c), drawn straight
+        // into the bottom screen.
+        bottom_level_render((u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL), menu_below,
+                            game_src, game_w, game_h, game->draw_palette.colors);
+        ctr_bottom_menu_shown = true;
     } else if (title_menu || title_menu_held || map_dialog || map_dialog_held) {
         ctr_draw_bottom_picture();
     } else if (!ctr_show_stats) {
-        ctr_draw_bottom_rays();
+        // Between levels, on the world map...: the dark rays.
+        bottom_idle_render((u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL));
+        ctr_bottom_menu_shown = true;
     } else if (ctr_bottom_menu_shown) {
         ctr_restore_bottom_console();
     }

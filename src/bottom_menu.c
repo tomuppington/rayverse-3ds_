@@ -157,12 +157,6 @@ void bottom_rays_render_small(u32* out) {
 static u8 status_panel[BOTTOM_W * BOTTOM_H]; // colour indices of the game's palette (0: rays show through)
 static u32 status_panel_key = 0xFFFFFFFF;
 static u16 status_spin, status_pulse;
-// When a cage is freed, the panel's medallion plays the Electoon's arrival (its flash and twinkle, as on
-// the main screen), then rests: the animation frame being shown, or -1.
-#define STATUS_ARRIVAL_FIRST_FRAME 56 // (just before the flash: the Electoon arrives at about frame 60)
-static s32 status_anim_frame = -1;
-static s32 status_cages_shown = -1;  // cages shown last time, for this place on the map
-static s32 status_place_shown = -1;
 
 static obj_t* status_find_object(s16 type) {
     for (s32 i = 0; i < level.nb_objects; ++i) {
@@ -278,28 +272,104 @@ static s32 status_medal_rest_frame_find(obj_t* obj, anim_t* anim, bool before_el
     return best;
 }
 
+#define STATUS_MEDAL_X 92     // the medallion's centre on the panel
+#define STATUS_MEDAL_Y 124
+#define STATUS_MEDAL_CACHE 128 // size of the kept pictures
+
+// The medallion at rest with 'cages' Electoons, centred on (cx, cy) of the current draw buffer: the
+// resting frame of its animation with only the medallion (its two halves, sprites 1 and 17) and settled
+// Electoons (sprite 2). In the animations the newest Electoon stays highlighted (sprite 15 or 16) until
+// the medallion opens, and twinkles (other sprites) come and go.
+static void status_draw_medal_rest(obj_t* medal, s32 cages, s32 cx, s32 cy) {
+    obj_t m = *medal;
+    m.main_etat = m.init_main_etat;
+    m.sub_etat = (u8)(32 + MAX(0, cages - 1));
+    m.anim_index = m.eta[m.main_etat][m.sub_etat].anim_index;
+    anim_t* anim = m.animations + m.anim_index;
+    s32 rest = status_medal_rest_frame(&m, anim, cages == 0);
+    s32 x0, y0, x1, y1;
+    status_frame_box(&m, anim, rest, &x0, &y0, &x1, &y1);
+    static anim_t rest_anim;
+    static anim_layer_t rest_layers[32];
+    u16 layers = anim->layers_per_frame & 0x3FFF;
+    if (layers <= COUNT(rest_layers)) {
+        memcpy(rest_layers, anim->layers + rest * layers, layers * sizeof(anim_layer_t));
+        for (s32 i = 0; i < layers; ++i) {
+            u8 sprite = rest_layers[i].sprite_index;
+            if (sprite == 15 || sprite == 16) {
+                rest_layers[i].sprite_index = 2;
+            } else if (sprite != 1 && sprite != 17 && sprite != 2) {
+                rest_layers[i].sprite_index = 0; // (not drawn)
+            }
+        }
+        rest_anim = *anim;
+        rest_anim.layers = rest_layers;
+        m.animations = &rest_anim;
+        m.anim_index = 0;
+        m.anim_frame = 0;
+    } else {
+        m.anim_frame = (u8)rest;
+    }
+    m.flags.flip_x = 0; // (keeps the object's own scale setting, 0: drawn as is, as in the level)
+    m.screen_x = cx - (x0 + x1) / 2;
+    m.screen_y = cy - (y0 + y1) / 2;
+    display2(&m);
+}
+
+// Levels without cages don't have the medallion's pictures: the panel uses the resting medallion (for
+// 0 to 6 cages) kept from the last level that had them (0x00RRGGBB, with bit 24 set where opaque).
+static u32 status_medal_cache[7][STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
+static bool status_medal_cache_ready;
+static const void* status_medal_cache_sprites; // (filled once per level)
+static u32 status_medal_rgb[BOTTOM_W * BOTTOM_H]; // the kept picture on the panel (0: none)
+
+static void status_medal_cache_fill(obj_t* medal) {
+    if (status_medal_cache_ready && status_medal_cache_sprites == medal->sprites) return;
+    static u8 scratch[STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
+    const rgb_t* pal = rvb[current_pal_id].colors;
+    u8* saved_buffer = draw_buffer;
+    s32 saved_w = screen_width, saved_h = screen_height;
+    s32 cx0, cx1, cy0, cy1;
+    get_sprite_clipping(&cx0, &cx1, &cy0, &cy1);
+    screen_width = STATUS_MEDAL_CACHE;
+    screen_height = STATUS_MEDAL_CACHE;
+    draw_buffer = scratch;
+    sprite_clipping(0, STATUS_MEDAL_CACHE, 0, STATUS_MEDAL_CACHE);
+    for (s32 n = 0; n <= 6; ++n) {
+        memset(scratch, 0, sizeof(scratch));
+        status_draw_medal_rest(medal, n, STATUS_MEDAL_CACHE / 2, STATUS_MEDAL_CACHE / 2);
+        for (s32 i = 0; i < STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE; ++i) {
+            u8 q = scratch[i];
+            status_medal_cache[n][i] = q ? (1u << 24) | ((u32)pal[q].r << 16) | ((u32)pal[q].g << 8) | pal[q].b : 0;
+        }
+    }
+    draw_buffer = saved_buffer;
+    screen_width = saved_w;
+    screen_height = saved_h;
+    sprite_clipping(cx0, cx1, cy0, cy1);
+    status_medal_cache_ready = true;
+    status_medal_cache_sprites = medal->sprites;
+}
+
 // Redraws the panel if anything on it changed. Returns true if it did.
 bool status_panel_update(void) {
-    world_info_t* wi = t_world_info + num_world_choice;
+    // (world_index: the place on the world map this level belongs to; the cage code counts cages there.)
+    world_info_t* wi = t_world_info + world_index;
     obj_t* sbar = (sbar_obj_id >= 0 && sbar_obj_id < level.nb_objects) ? level.objects + sbar_obj_id : NULL;
-    u32 key = (u32)num_world_choice | ((u32)wi->nb_cages << 5) | ((u32)Nb_total_cages << 8) |
+    u32 key = (u32)world_index | ((u32)wi->nb_cages << 5) | ((u32)Nb_total_cages << 8) |
               ((u32)(status_bar.lives & 0x7F) << 15) | ((u32)status_bar.num_wiz << 22) |
               ((u32)(ray.hit_points & 7) << 29);
     key ^= (u32)status_bar.max_hitp * 0x9E3779B1u ^ (u32)language * 0x85EBCA6Bu ^ (u32)(num_world * 16 + num_level) * 0xC2B2AE35u;
     if (!sbar) return false;
-    // (Redrawn every frame while the extra-life or power sparkle plays on the counters, and once after.)
-    static bool sparkle_shown;
-    bool sparkle = id_Cling_1up != -1 || id_Cling_Pow != -1;
-    if (key == status_panel_key && status_anim_frame < 0 && !sparkle && !sparkle_shown) return false;
-    sparkle_shown = sparkle;
+    // Redrawn every frame while the extra-life or power sparkle plays on the counters, or while a freed
+    // cage's medallion is on the main screen (the panel's medallion follows it), and once after.
+    obj_t* medal = status_find_object(TYPE_197_MEDAILLON_TOON);
+    bool medal_live = medal && medal->is_active && medal->sub_etat >= 32 && medal->sub_etat <= 37;
+    static bool animating_shown;
+    bool animating = id_Cling_1up != -1 || id_Cling_Pow != -1 || medal_live;
+    if (key == status_panel_key && !animating && !animating_shown) return false;
+    animating_shown = animating;
     status_panel_key = key;
-    // A cage was just freed here: play the arrival.
-    s32 cages_now = MIN(6, wi->nb_cages);
-    if (status_place_shown == num_world_choice && cages_now > status_cages_shown && cages_now > 0) {
-        status_anim_frame = STATUS_ARRIVAL_FIRST_FRAME;
-    }
-    status_place_shown = num_world_choice;
-    status_cages_shown = cages_now;
 
     // Draw with the game's routines into the panel: point the drawing at it for a moment.
     u8* saved_buffer = draw_buffer;
@@ -321,57 +391,53 @@ bool status_panel_update(void) {
     if (wi->text) {
         display_text(wi->text, BOTTOM_W / 2, 61, 2, wi->color);
     }
+    memset(status_medal_rgb, 0, sizeof(status_medal_rgb));
 
-    // Cages of this part of the world: the medallion with its Electoons (as when a cage is freed).
-    obj_t* medal = status_find_object(TYPE_197_MEDAILLON_TOON);
+    // Cages of this part of the world: the medallion with its Electoons, as when a cage is freed.
     s32 cages = MIN(6, wi->nb_cages);
     if (medal) {
-        obj_t m = *medal;
-        m.main_etat = m.init_main_etat;
-        m.sub_etat = (u8)(32 + MAX(0, cages - 1));
-        m.anim_index = m.eta[m.main_etat][m.sub_etat].anim_index;
-        anim_t* anim = m.animations + m.anim_index;
-        // The animation flies the medallion in, rests (while an Electoon joins), then opens and flies off.
-        // Show it at rest: before the Electoon arrives for 0 cages, otherwise just before it opens.
-        s32 rest = status_medal_rest_frame(&m, anim, cages == 0);
-        m.flags.flip_x = 0; // (keeps the object's own scale setting, 0: drawn as is, as in the level)
-        s32 x0, y0, x1, y1;
-        status_frame_box(&m, anim, rest, &x0, &y0, &x1, &y1); // (placed by the resting medallion)
-        static anim_t rest_anim;
-        static anim_layer_t rest_layers[32];
-        if (status_anim_frame >= 0 && status_anim_frame < rest) {
-            m.anim_frame = (u8)status_anim_frame++; // (one frame of the arrival per game frame, as in the level)
-        } else {
-            status_anim_frame = -1;
-            // At rest: the resting frame with only the medallion (its two halves, sprites 1 and 17) and
-            // settled Electoons (sprite 2). In the animations the newest Electoon stays highlighted
-            // (sprite 15 or 16) until the medallion opens, and twinkles (other sprites) come and go.
-            u16 layers = anim->layers_per_frame & 0x3FFF;
-            if (layers <= COUNT(rest_layers)) {
-                memcpy(rest_layers, anim->layers + rest * layers, layers * sizeof(anim_layer_t));
-                for (s32 i = 0; i < layers; ++i) {
-                    u8 sprite = rest_layers[i].sprite_index;
-                    if (sprite == 15 || sprite == 16) {
-                        rest_layers[i].sprite_index = 2;
-                    } else if (sprite != 1 && sprite != 17 && sprite != 2) {
-                        rest_layers[i].sprite_index = 0; // (not drawn)
-                    }
-                }
-                rest_anim = *anim;
-                rest_anim.layers = rest_layers;
-                m.animations = &rest_anim;
-                m.anim_index = 0;
-                m.anim_frame = 0;
-            } else {
-                m.anim_frame = (u8)rest;
+        status_medal_cache_fill(medal); // (for levels without cages, see status_medal_cache)
+        s32 shown = cages;
+        if (medal_live) {
+            // A cage was just freed (the count already includes it): follow the main screen's
+            // medallion, which shows the new Electoon arriving from about frame 60 while it rests,
+            // then opens. Before it has come together, and once it opens, show the medallion at rest.
+            obj_t m = *medal;
+            m.anim_index = m.eta[m.main_etat][m.sub_etat].anim_index;
+            anim_t* anim = m.animations + m.anim_index;
+            s32 rest = status_medal_rest_frame(&m, anim, false);
+            if (m.anim_frame >= 45 && m.anim_frame <= rest) {
+                s32 x0, y0, x1, y1;
+                status_frame_box(&m, anim, rest, &x0, &y0, &x1, &y1);
+                m.flags.flip_x = 0;
+                m.screen_x = STATUS_MEDAL_X - (x0 + x1) / 2;
+                m.screen_y = STATUS_MEDAL_Y - (y0 + y1) / 2;
+                display2(&m);
+                shown = -1;
+            } else if (m.anim_frame < 45) {
+                shown = MAX(0, cages - 1);
             }
         }
-        m.screen_x = 92 - (x0 + x1) / 2; // centred on (92, 124)
-        m.screen_y = 124 - (y0 + y1) / 2;
-        display2(&m);
+        if (shown >= 0) status_draw_medal_rest(medal, shown, STATUS_MEDAL_X, STATUS_MEDAL_Y);
+    } else if (status_medal_cache_ready) {
+        // No medallion in this level: the picture kept from a level that had one.
+        const u32* pic = status_medal_cache[cages];
+        for (s32 y = 0; y < STATUS_MEDAL_CACHE; ++y) {
+            s32 py = STATUS_MEDAL_Y - STATUS_MEDAL_CACHE / 2 + y;
+            if (py < 0 || py >= BOTTOM_H) continue;
+            for (s32 x = 0; x < STATUS_MEDAL_CACHE; ++x) {
+                s32 px = STATUS_MEDAL_X - STATUS_MEDAL_CACHE / 2 + x;
+                if (px >= 0 && px < BOTTOM_W) status_medal_rgb[py * BOTTOM_W + px] = pic[y * STATUS_MEDAL_CACHE + x];
+            }
+        }
+    }
+    if (medal || status_medal_cache_ready) {
+        // (While a freed cage's medallion is on the main screen, the count goes up when its Electoon
+        // arrives, at about frame 62.)
+        s32 count = (medal_live && medal->anim_frame < 62) ? MAX(0, cages - 1) : cages;
         char text[32];
-        snprintf(text, sizeof(text), "/%d of 6/", (int)cages);
-        display_text(text, 92, 200, 2, 5);
+        snprintf(text, sizeof(text), "/%d of 6/", (int)count);
+        display_text(text, STATUS_MEDAL_X, 200, 2, 5);
     }
 
     // Lives and hit points, tings: the status bar's own sprites, laid out as on the main screen.
@@ -417,12 +483,11 @@ bool status_panel_update(void) {
 // Forget the panel (e.g. a new level), so that it is redrawn.
 void status_panel_reset(void) {
     status_panel_key = 0xFFFFFFFF;
-    status_anim_frame = -1;
 }
 
 // Bottom screen during levels: the status panel, which crossfades with the pause menu when the game is
 // paused (and back when it carries on), over dark, slowly turning rays that carry on throughout.
-#define PAUSE_FADE_STEPS 16                        // frames for the crossfade (about a quarter of a second)
+#define PAUSE_FADE_STEPS 8                         // frames for the crossfade (about an eighth of a second)
 #define PAUSE_MENU_PIXEL (1u << 24)                // in pause_layer: a pixel of the menu (colour in the low bits)
 #define PAUSE_BOX_PIXEL  (1u << 25)                // in pause_layer: inside the menu's see-through box
 static u32 pause_layer[BOTTOM_W * BOTTOM_H];        // the pause menu as last seen (kept for fading it out)
@@ -457,11 +522,11 @@ static bool pause_layer_capture(const u8* src, s32 src_w, s32 src_h, const rgb_t
             }
         }
     }
-    // While the menu dissolves in, the number of pixels keeps growing (with pauses of up to 4 frames):
-    // it is complete once that number has stayed the same for 6 frames.
+    // While the menu appears (its zoom-in is skipped on the 3DS, see FonduOption, but just in case) the
+    // number of pixels keeps changing: it is complete once that number has stayed the same for 2 frames.
     static s32 steady_frames;
     steady_frames = (pixels == previous_pixels) ? steady_frames + 1 : 0;
-    bool steady = steady_frames >= 5;
+    bool steady = steady_frames >= 1;
     previous_pixels = pixels;
     if (max_x < 0) return false;
     s32 area = (max_x - min_x + 1) * (max_y - min_y + 1);
@@ -501,9 +566,88 @@ static inline u32 bottom_blend(u32 a, u32 b, u32 t) { // t/256 of b
     return (r << 16) | (g << 8) | bl;
 }
 
-// Draws the bottom screen during a level (0x00RRGGBB, 320x240). 'paused': the pause menu is open, and src
-// (src_w x src_h) is the game's picture with the menu on it.
-void bottom_level_render(u32* out, bool paused, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette) {
+#define RGB565(c) ((u16)((((c) >> 8) & 0xF800) | (((c) >> 5) & 0x07E0) | (((c) >> 3) & 0x001F)))
+#define RGB565_TO_888(p) ((((u32)(p) & 0xF800) << 8) | (((u32)(p) & 0x07E0) << 5) | (((u32)(p) & 0x001F) << 3))
+
+// The dark rays at half resolution, in the bottom screen's own pixel order (RGB565, column by column,
+// bottom to top: index x * 120 + (119 - y)). They turn a little every frame.
+static u16 dark_rays[160 * 120];
+
+static void dark_rays_update(void) {
+    if (!bottom_tables_ready) bottom_menu_init_tables();
+    s32 band = ((s32)(sinf((float)status_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
+    const s32 outer = 200;
+    static u16 brightness[256];
+    for (s32 r = 0; r < 256; ++r) {
+        u32 k;
+        if (r < band) k = (u32)(r * 256 / band);
+        else if (r < outer) k = (u32)((outer - r) * 256 / (outer - band));
+        else k = 0;
+        brightness[r] = (u16)(k * 90 >> 8); // dark: about a third of the menus' brightness
+    }
+    for (s32 hx = 0; hx < 160; ++hx) {
+        u16* col = dark_rays + hx * 120;
+        for (s32 hy = 0; hy < 120; ++hy) {
+            s32 i = (2 * hy) * BOTTOM_W + 2 * hx;
+            u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
+            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]);
+            col[119 - hy] = RGB565(ray);
+        }
+    }
+    status_spin += 4;
+    status_pulse += 4;
+}
+
+// The panel in the bottom screen's pixel order (with a mask of its pixels), rebuilt when the panel or
+// its colours change, so that most frames only have to choose between it and the rays.
+static u16 panel565[BOTTOM_W * BOTTOM_H];
+static u8 panel565_mask[BOTTOM_W * BOTTOM_H];
+
+static void panel565_build(const rgb_t* pp) {
+    for (s32 x = 0; x < BOTTOM_W; ++x) {
+        u16* col = panel565 + x * BOTTOM_H;
+        u8* mask = panel565_mask + x * BOTTOM_H;
+        for (s32 y = 0; y < BOTTOM_H; ++y) {
+            s32 j = y * BOTTOM_W + x;
+            u8 q = status_panel[j];
+            u32 c = 0;
+            bool opaque = true;
+            if (q) {
+                c = ((u32)pp[q].r << 16) | ((u32)pp[q].g << 8) | pp[q].b;
+            } else if (status_medal_rgb[j]) {
+                c = status_medal_rgb[j] & 0xFFFFFF;
+            } else {
+                opaque = false;
+            }
+            col[BOTTOM_H - 1 - y] = RGB565(c);
+            mask[BOTTOM_H - 1 - y] = opaque;
+        }
+    }
+}
+
+// Forget the pause menu's state (outside levels), so that a level always starts with the panel.
+void bottom_level_reset(void) {
+    pause_fade = 0;
+    menu_fade = 0;
+    pause_layer_valid = false;
+}
+
+// The bottom screen outside levels (between levels, the world map...): the dark rays alone, turning on
+// from where the level's left them. fb: the bottom screen (RGB565, 320x240, its own pixel order).
+void bottom_idle_render(u16* fb) {
+    bottom_level_reset();
+    dark_rays_update();
+    for (s32 x = 0; x < BOTTOM_W; ++x) {
+        u16* col = fb + x * BOTTOM_H;
+        const u16* rc = dark_rays + (x >> 1) * 120;
+        for (s32 fy = 0; fy < BOTTOM_H; ++fy) col[fy] = rc[fy >> 1];
+    }
+}
+
+// Draws the bottom screen during a level. fb: the bottom screen (RGB565, 320x240, in its own pixel order:
+// column by column, bottom to top). 'paused': the pause menu is open, and src (src_w x src_h) is the
+// game's picture with the menu on it.
+void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette) {
     if (!bottom_tables_ready) bottom_menu_init_tables();
     if (!paused) {
         memcpy(panel_palette, palette, sizeof(panel_palette));
@@ -519,8 +663,8 @@ void bottom_level_render(u32* out, bool paused, const u8* src, s32 src_w, s32 sr
         }
         ++paused_frames;
         if (pause_layer_capture(src, src_w, src_h, palette, !was_paused)) captured_this_pause = true;
-        // The panel and the menu crossfade once the game has finished drawing its menu (or after half a
-        // second, whatever happens).
+        // The panel and the menu crossfade once the game has drawn its menu (or after half a second,
+        // whatever happens).
         if (captured_this_pause || paused_frames > 30) {
             if (pause_fade < PAUSE_FADE_STEPS) ++pause_fade;
             if (captured_this_pause && menu_fade < PAUSE_FADE_STEPS) ++menu_fade;
@@ -530,49 +674,55 @@ void bottom_level_render(u32* out, bool paused, const u8* src, s32 src_w, s32 sr
         if (menu_fade > 0) --menu_fade;
     }
     was_paused = paused;
-    status_panel_update(); // (redraws the panel only if something on it changed)
+
+    // The panel (redrawn only if something on it changed) in the screen's order.
+    bool redrawn = status_panel_update();
+    static rgb_t built_palette[256];
+    static bool built;
+    if (redrawn || !built || memcmp(built_palette, pp, sizeof(built_palette)) != 0) {
+        panel565_build(pp);
+        memcpy(built_palette, pp, sizeof(built_palette));
+        built = true;
+    }
+    dark_rays_update();
+
     u32 panel_alpha = (u32)((PAUSE_FADE_STEPS - pause_fade) * 256 / PAUSE_FADE_STEPS);
     u32 menu_alpha = pause_layer_valid ? (u32)(menu_fade * 256 / PAUSE_FADE_STEPS) : 0;
-
-    s32 band = ((s32)(sinf((float)status_pulse * (2.0f * 3.14159265f / 4096.0f)) * 75.0f)) + 105;
-    const s32 outer = 200;
-    static u16 brightness[256];
-    for (s32 r = 0; r < 256; ++r) {
-        u32 k;
-        if (r < band) k = (u32)(r * 256 / band);
-        else if (r < outer) k = (u32)((outer - r) * 256 / (outer - band));
-        else k = 0;
-        brightness[r] = (u16)(k * 90 >> 8); // dark: about a third of the menus' brightness
+    if (menu_alpha == 0 && panel_alpha >= 256) {
+        // Most frames: each pixel is the panel or the rays.
+        for (s32 x = 0; x < BOTTOM_W; ++x) {
+            u16* col = fb + x * BOTTOM_H;
+            const u16* pc = panel565 + x * BOTTOM_H;
+            const u8* pm = panel565_mask + x * BOTTOM_H;
+            const u16* rc = dark_rays + (x >> 1) * 120;
+            for (s32 fy = 0; fy < BOTTOM_H; ++fy) col[fy] = pm[fy] ? pc[fy] : rc[fy >> 1];
+        }
+        return;
     }
-    for (s32 y = 0; y < BOTTOM_H; y += 2) {
-        for (s32 x = 0; x < BOTTOM_W; x += 2) {
-            s32 i = y * BOTTOM_W + x;
-            u32 c = bottom_wedge_colour[(u16)(bottom_angle[i] - status_spin) & 1023];
-            u32 ray = menu_rays_darken_any(c, brightness[bottom_radius[i]]); // (rays at half resolution)
-            static const s32 offs[4] = {0, 1, BOTTOM_W, BOTTOM_W + 1};
-            for (s32 k = 0; k < 4; ++k) {
-                s32 j = i + offs[k];
-                // The rays, then the panel (fading), then the pause menu (fading) on top.
-                u32 pixel = ray;
-                u8 q = status_panel[j];
-                if (q && panel_alpha) {
-                    rgb_t pc = pp[q];
-                    u32 c = ((u32)pc.r << 16) | ((u32)pc.g << 8) | pc.b;
-                    pixel = (panel_alpha >= 256) ? c : bottom_blend(pixel, c, panel_alpha);
-                }
-                if (menu_alpha) {
-                    u32 m = pause_layer[j];
-                    if (m) {
-                        u32 c = (m & PAUSE_MENU_PIXEL) ? (m & 0xFFFFFF) : menu_rays_darken_any(ray, 96);
-                        pixel = (menu_alpha >= 256) ? c : bottom_blend(pixel, c, menu_alpha);
-                    }
-                }
-                out[j] = pixel;
+    // Crossfading with the pause menu (or showing it): the rays, then the panel (fading), then the menu.
+    for (s32 x = 0; x < BOTTOM_W; ++x) {
+        u16* col = fb + x * BOTTOM_H;
+        const u16* pc = panel565 + x * BOTTOM_H;
+        const u8* pm = panel565_mask + x * BOTTOM_H;
+        const u16* rc = dark_rays + (x >> 1) * 120;
+        for (s32 fy = 0; fy < BOTTOM_H; ++fy) {
+            s32 y = BOTTOM_H - 1 - fy;
+            u32 ray = RGB565_TO_888(rc[fy >> 1]);
+            u32 pixel = ray;
+            if (panel_alpha && pm[fy]) {
+                u32 c = RGB565_TO_888(pc[fy]);
+                pixel = (panel_alpha >= 256) ? c : bottom_blend(pixel, c, panel_alpha);
             }
+            if (menu_alpha) {
+                u32 m = pause_layer[y * BOTTOM_W + x];
+                if (m) {
+                    u32 c = (m & PAUSE_MENU_PIXEL) ? (m & 0xFFFFFF) : menu_rays_darken_any(ray, 96);
+                    pixel = (menu_alpha >= 256) ? c : bottom_blend(pixel, c, menu_alpha);
+                }
+            }
+            col[fy] = RGB565(pixel);
         }
     }
-    status_spin += 4;
-    status_pulse += 4;
 }
 
 //----------------------------------------------------------------------------------------------

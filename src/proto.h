@@ -48,7 +48,9 @@ void bottom_menu_render(u32* out, const u8* src, s32 src_w, s32 src_h, const rgb
 void bottom_rays_render_small(u32* out);
 bool status_panel_update(void);
 void status_panel_reset(void);
-void bottom_level_render(u32* out, bool paused, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette);
+void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src_h, const rgb_t* palette);
+void bottom_idle_render(u16* fb);
+void bottom_level_reset(void);
 extern bool menu_rays_enabled;
 extern bool play_window_boxed;
 void set_play_window(s32 size);

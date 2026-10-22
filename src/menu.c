@@ -1805,6 +1805,12 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
         rvb_menu_save = rvb[current_pal_id];
         rvb[current_pal_id] = MenuPalette;
         INIT_FADE_IN();
+        if (bottom_menu_active()) {
+            // 3DS port: the menu is on the bottom screen, which crossfades to it (bottom_menu.c): skip the
+            // menu's zoom-in (one frame instead of 31) and its palette fade, so that it opens at once.
+            EtapeFondu = 2;
+            while (nb_fade > 0) DO_FADE();
+        }
         SYNCHRO_LOOP(apparition_prg);
         rvb[current_pal_id] = rvb_menu_save;
     } else if (mode == 1) {
@@ -1824,6 +1830,13 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
 //        rvb_menu_save = rvb[current_pal_id];
 
         rvb[current_pal_id] = MenuPalette;
+        if (bottom_menu_active()) {
+            EtapeFondu = 31; // 3DS port: skip the menu's zoom-out (one frame instead of 31), see above
+            // The button that closed the menu is probably still held: forget it, so that it doesn't open
+            // the menu again straight away (the zoom-out used to take long enough for it to be let go).
+            RESET_TOUCHE(SC_ESCAPE);
+            RESET_TOUCHE(SC_ENTER);
+        }
         SYNCHRO_LOOP(apparition_prg);
         if (GameModeVideo == MODE_X) {
             InitModeXWithFrequency(VGA_FREQ);
