@@ -42,7 +42,7 @@ static s32 stereo_scene;
 // Called by the game loop after the background has been drawn.
 void stereo_capture_background(void) {
     if (!draw_buffer) return;
-    memcpy(stereo_layer_back, draw_buffer, sizeof(stereo_layer_back));
+    memcpy(stereo_layer_back, draw_buffer, STEREO_W * STEREO_H);
     stereo_have_back = true;
     stereo_scene = STEREO_SCENE_LEVEL;
 }
@@ -57,7 +57,7 @@ void stereo_capture_map_background(void) {
 // the level dots, before the binocular frame and the level names).
 void stereo_capture_before_hud(void) {
     if (!draw_buffer || !stereo_have_back) return;
-    memcpy(stereo_layer_main, draw_buffer, sizeof(stereo_layer_main));
+    memcpy(stereo_layer_main, draw_buffer, STEREO_W * STEREO_H);
     stereo_have_main = true;
 }
 

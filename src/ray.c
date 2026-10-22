@@ -2557,7 +2557,7 @@ void DO_RAY_ON_MS(void) {
             RAY_RESPOND_TO_NOTHING();
         if (ray.screen_x < -20 && ray.speed_x < 0)
             ray.speed_x = 0;
-        if (ray.screen_x > 210 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) && ray.speed_x > 0)
+        if (ray.screen_x > 210 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2 && ray.speed_x > 0) // widescreen: half the extra width, so more of it is ahead of Rayman
             ray.speed_x = 0;
         if (ray.screen_y < 3 && ray.speed_y < 0)
             ray.speed_y = 0;

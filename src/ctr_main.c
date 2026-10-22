@@ -161,20 +161,26 @@ void surface_resize(surface_t* surface, int width, int height) {
 //   1 CRT_WIDE   - 640x240 wide mode: the 4:3 shape of a 1995 monitor, exactly x2 wide
 //   2 PIXEL_WIDE - 640x200 wide mode: exactly x2 wide, x1 tall - perfectly even pixels, smaller
 //   3 FILL_400   - whole screen at the normal 400x240 resolution (the previous default)
+//   4 WIDE_VIEW  - like FILL_WIDE, but levels are drawn 400 pixels wide instead of 320, showing more of
+//                  each level (see SCREEN_WIDTH in types.h); 400 -> 800 is an exact 2x. Menus, the
+//                  world map and levels narrower than 400 pixels keep the original picture.
+// The chosen mode is remembered in RAY3DS.CFG in the game folder.
 // Scaling uses area-weighted sampling: each screen pixel takes the colours of the game pixels it
 // covers, in proportion. Pixels stay sharp; only the screen pixels that straddle two game pixels get
 // blended, which avoids the uneven, shimmering look of plain pixel-repeating at non-whole scales.
-enum { CTR_DISPLAY_FILL_WIDE, CTR_DISPLAY_CRT_WIDE, CTR_DISPLAY_PIXEL_WIDE, CTR_DISPLAY_FILL_400, CTR_DISPLAY_MODE_COUNT };
+enum { CTR_DISPLAY_FILL_WIDE, CTR_DISPLAY_CRT_WIDE, CTR_DISPLAY_PIXEL_WIDE, CTR_DISPLAY_FILL_400, CTR_DISPLAY_WIDE_VIEW, CTR_DISPLAY_MODE_COUNT };
 typedef struct ctr_display_mode_t {
     const char* name;
     bool wide;
     s16 out_w, out_h; // in framebuffer pixels
+    bool wide_view;   // levels drawn wider (more of the level visible)
 } ctr_display_mode_t;
 static const ctr_display_mode_t ctr_display_modes[CTR_DISPLAY_MODE_COUNT] = {
-    { "Fill screen, sharp (800x240)",   true,  800, 240 },
-    { "Original 4:3 shape (640x240)",   true,  640, 240 },
-    { "Pixel perfect (640x200)",        true,  640, 200 },
-    { "Fill screen, standard (400x240)", false, 400, 240 },
+    { "Fill screen, sharp (800x240)",   true,  800, 240, false },
+    { "Original 4:3 shape (640x240)",   true,  640, 240, false },
+    { "Pixel perfect (640x200)",        true,  640, 200, false },
+    { "Fill screen, standard (400x240)", false, 400, 240, false },
+    { "WIDE VIEW: see more of each level", true, 800, 240, true },
 };
 static s32 ctr_display_mode = CTR_DISPLAY_FILL_WIDE;
 static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 in wide mode)
@@ -254,10 +260,37 @@ static inline u32 ctr_mix8(u32 a, u32 b, u32 w) {
     return (w > 128) ? ctr_avg8(a, m) : ctr_avg8(m, b);
 }
 
+#define CTR_CONFIG_FILE "RAY3DS.CFG"
+
+static void ctr_apply_display_mode(void) {
+    ctr_axis_x.out_size = 0; // force rebuild
+    widescreen_enabled = ctr_display_modes[ctr_display_mode].wide_view;
+}
+
 static void ctr_cycle_display_mode(void) {
     ctr_display_mode = (ctr_display_mode + 1) % CTR_DISPLAY_MODE_COUNT;
-    ctr_axis_x.out_size = 0; // force rebuild
+    ctr_apply_display_mode();
     printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
+    if (widescreen_enabled != (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL) && RaymanDansUneMapDuJeu) {
+        printf(" (the level width changes when the\n  next level starts)\n");
+    }
+    FILE* fp = fopen(CTR_CONFIG_FILE, "w");
+    if (fp) {
+        fprintf(fp, "display_mode=%d\n", (int)ctr_display_mode);
+        fclose(fp);
+    }
+}
+
+static void ctr_load_config(void) {
+    FILE* fp = fopen(CTR_CONFIG_FILE, "r");
+    if (!fp) return;
+    int mode = 0;
+    if (fscanf(fp, "display_mode=%d", &mode) == 1 && mode >= 0 && mode < CTR_DISPLAY_MODE_COUNT) {
+        ctr_display_mode = mode;
+        ctr_apply_display_mode();
+        printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
+    }
+    fclose(fp);
 }
 
 // Copy the game's 320x200, 256-colour picture to the top screen, scaling it on the way.
@@ -481,6 +514,7 @@ int main(int argc, char** argv) {
         ctr_wait_for_start();
         return 0;
     }
+    ctr_load_config(); // (in the game folder)
 
     // The game's 320x200 picture, as 32-bit pixels (same as the PC version)
     memset(&app_state->game_surface, 0, sizeof(app_state->game_surface));
