@@ -1173,6 +1173,7 @@ void DO_BBMONT2_COMMAND(obj_t* obj) {
         if (Phase == 0)
         {
             Phase = 1;
+            ps1_music_chase_started(); // 3DS port: the PS1's chase music (see ps1_music.c)
         }
         SET_X_SPEED(obj);
         if ((u8) Phase < 4U)

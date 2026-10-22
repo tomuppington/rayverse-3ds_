@@ -694,12 +694,32 @@ static u8 panel565_mask[BOTTOM_W * BOTTOM_H];
 
 static void panel565_build(const rgb_t* pp) {
     static u16 pal565[256];
-    for (s32 i = 0; i < 256; ++i) {
-        pal565[i] = BOTTOM_RGB565(((u32)pp[i].r << 16) | ((u32)pp[i].g << 8) | pp[i].b);
+    static rgb_t built_pal[256];
+    static u8 built_panel[BOTTOM_W * BOTTOM_H]; // (the panel as last converted)
+    static bool built;
+    // Everything again if the colours changed; otherwise only the 8x8 blocks that changed (e.g. the
+    // extra-life sparkle or the medallion's animation redraw only a small part).
+    bool all = !built || memcmp(built_pal, pp, sizeof(built_pal)) != 0;
+    if (all) {
+        for (s32 i = 0; i < 256; ++i) {
+            pal565[i] = BOTTOM_RGB565(((u32)pp[i].r << 16) | ((u32)pp[i].g << 8) | pp[i].b);
+        }
+        memcpy(built_pal, pp, sizeof(built_pal));
+        built = true;
     }
     // In 8x8 blocks, so that reading rows and writing columns both stay in the cache.
     for (s32 bx = 0; bx < BOTTOM_W; bx += 8) {
         for (s32 by = 0; by < BOTTOM_H; by += 8) {
+            if (!all) {
+                bool changed = false;
+                for (s32 y = by; y < by + 8 && !changed; ++y) {
+                    changed = memcmp(status_panel + y * BOTTOM_W + bx, built_panel + y * BOTTOM_W + bx, 8) != 0;
+                }
+                if (!changed) continue;
+            }
+            for (s32 y = by; y < by + 8; ++y) {
+                memcpy(built_panel + y * BOTTOM_W + bx, status_panel + y * BOTTOM_W + bx, 8);
+            }
             for (s32 x = bx; x < bx + 8; ++x) {
                 u16* col = panel565 + x * BOTTOM_H;
                 u8* mask = panel565_mask + x * BOTTOM_H;
