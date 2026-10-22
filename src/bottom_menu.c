@@ -252,14 +252,45 @@ static inline u32 menu_rays_darken(u32 c, u32 k) {
     return ((((c >> 16) & 0xFF) * k >> 8) << 16) | ((((c >> 8) & 0xFF) * k >> 8) << 8) | ((c & 0xFF) * k >> 8);
 }
 
+// The menu layer of the last title-menu frame: 0x100 | colour for menu pixels, 0 for background. Kept,
+// with a copy of that frame, for the frames in between where the game shows the same picture without
+// drawing it again (fading out when leaving a menu): those are shown the same way.
+static u16 menu_layer[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+static u8 menu_layer_frame[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
+static bool menu_layer_valid;
+
+static void menu_rays_compose(u32* top, u32* bottom, s32 w, s32 h, const rgb_t* palette);
+
 // Draws both screens for a title-screen menu (0x00RRGGBB, row by row):
 // - top (320x200, the game's picture size): the animated rays with the logo;
 // - bottom (320x240): the menu from the game's picture src (320x200, in the middle), over the rays.
 // Pixels of src still showing this frame's background picture count as background.
 void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette) {
-    if (!bottom_tables_ready) bottom_menu_init_tables();
     const u8* bg = menu_rays_background;
-    if (!bg) return;
+    if (!bg || w != SCREEN_WIDTH_ORIGINAL || h != SCREEN_HEIGHT_ORIGINAL) return;
+    s32 n = w * h;
+    for (s32 i = 0; i < n; ++i) {
+        menu_layer[i] = (src[i] != bg[i]) ? (u16)(0x100 | src[i]) : 0;
+    }
+    memcpy(menu_layer_frame, src, n);
+    menu_layer_valid = true;
+    menu_rays_compose(top, bottom, w, h, palette);
+}
+
+// True if this frame shows the same picture as the last title-menu frame (see menu_layer).
+bool menu_rays_holding(const u8* src, s32 w, s32 h) {
+    return menu_rays_enabled && menu_layer_valid && !OptionGame && !RaymanDansUneMapDuJeu &&
+           w == SCREEN_WIDTH_ORIGINAL && h == SCREEN_HEIGHT_ORIGINAL &&
+           memcmp(src, menu_layer_frame, w * h) == 0;
+}
+
+// Draws both screens again from the last title-menu frame (with this frame's palette and rays).
+void menu_rays_render_held(u32* top, u32* bottom, const rgb_t* palette) {
+    menu_rays_compose(top, bottom, SCREEN_WIDTH_ORIGINAL, SCREEN_HEIGHT_ORIGINAL, palette);
+}
+
+static void menu_rays_compose(u32* top, u32* bottom, s32 w, s32 h, const rgb_t* palette) {
+    if (!bottom_tables_ready) bottom_menu_init_tables();
 
     // The menus fade in and out by darkening the palette: darken everything else the same way.
     const rgb_t* full = rvb[current_pal_id].colors;
@@ -302,13 +333,13 @@ void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const 
     for (s32 y = 0; y < BOTTOM_H; ++y) {
         s32 sy = y - ty;
         bool in = sy >= 0 && sy < h;
-        const u8* row = src + sy * w;
-        const u8* bg_row = bg + sy * w;
+        const u16* layer_row = menu_layer + sy * w;
         u32* o = bottom + y * BOTTOM_W;
         for (s32 x = 0; x < BOTTOM_W; ++x) {
             s32 sx = x - tx;
-            if (in && sx >= 0 && sx < w && row[sx] != bg_row[sx]) {
-                rgb_t c = palette[row[sx]];
+            u16 m = (in && sx >= 0 && sx < w) ? layer_row[sx] : 0;
+            if (m) {
+                rgb_t c = palette[m & 0xFF];
                 o[x] = ((u32)c.r << 16) | ((u32)c.g << 8) | c.b;
             } else {
                 s32 i = y * BOTTOM_W + x;

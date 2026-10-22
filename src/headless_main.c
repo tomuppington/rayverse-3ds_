@@ -139,11 +139,20 @@ static u32 headless_rays_bottom[320 * 240];
 static bool headless_rays_shown;
 
 static void headless_render_rays(app_state_t* app_state) {
+    game_state_t* game = &app_state->game;
+    const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
     headless_rays_shown = menu_rays_active();
     if (headless_rays_shown) {
-        game_state_t* game = &app_state->game;
-        const u8* src = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
         menu_rays_render(headless_rays, headless_rays_bottom, src, SCREEN_WIDTH, SCREEN_HEIGHT, game->draw_palette.colors);
+    } else if (menu_rays_holding(src, SCREEN_WIDTH, SCREEN_HEIGHT)) {
+        headless_rays_shown = true;
+        menu_rays_render_held(headless_rays, headless_rays_bottom, game->draw_palette.colors);
+    }
+    if (getenv("TRACE_RAYS")) {
+        // which frames are shown plainly (and whether they are black), to spot flashes between menus
+        u32 lit = 0;
+        for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i += 7) { rgb_t c = game->draw_palette.colors[src[i]]; lit += (c.r + c.g + c.b) > 30; }
+        fprintf(headless_log, "[frame %lld] RAYS %s lit %u\n", (long long)headless_frame, headless_rays_shown ? "split" : "plain", lit);
     }
     menu_rays_background = NULL;
 }

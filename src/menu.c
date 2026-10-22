@@ -609,58 +609,68 @@ static inline s32 option_row(s32 i) { return i; }
 // It is a page of the options screen rather than a separate menu screen, so it works the same from
 // the title menu and from the in-game menu.
 static bool gfx_page;     // the graphics page is showing
-static s32 gfx_position;  // 0: picture mode, 1: exit
+static s32 gfx_position;  // 0..(number of picture modes - 1): a picture mode; then exit
 static bool gfx_changed_in_level;
 
 static void gfx_page_commande(void) {
     TestCompteur();
     bool repeat_ok = button_released || (delai_repetition < compteur && (compteur % repetition) == 0);
+    s32 count = platform_display_mode_count();
     if (SelectButPressed() && button_released) {
         gfx_page = false; // back to the options page
         PlaySnd_old(77);
         RESET_TOUCHE(SC_ESCAPE);
-    } else if ((upjoy() || downjoy()) && repeat_ok) {
+    } else if (upjoy() && repeat_ok) {
         PlaySnd_old(68);
-        gfx_position = 1 - gfx_position;
-    } else if (gfx_position == 0 && (rightjoy() || leftjoy() || ValidButPressed()) && repeat_ok) {
+        gfx_position = (gfx_position + count) % (count + 1);
+    } else if (downjoy() && repeat_ok) {
         PlaySnd_old(68);
-        s32 count = platform_display_mode_count();
-        s32 mode = platform_display_mode_get();
-        mode = leftjoy() ? (mode + count - 1) % count : (mode + 1) % count;
-        platform_display_mode_set(mode);
-        if (RaymanDansUneMapDuJeu) gfx_changed_in_level = true;
-    } else if (gfx_position == 1 && ValidButPressed() && button_released) {
-        gfx_page = false;
-        PlaySnd_old(69);
+        gfx_position = (gfx_position + 1) % (count + 1);
+    } else if (ValidButPressed() && button_released) {
+        if (gfx_position < count) {
+            PlaySnd_old(68);
+            if (gfx_position != platform_display_mode_get()) {
+                platform_display_mode_set(gfx_position);
+                if (RaymanDansUneMapDuJeu) gfx_changed_in_level = true;
+            }
+        } else {
+            gfx_page = false;
+            PlaySnd_old(69);
+        }
     }
     TestButtonReleased();
 }
 
 static void gfx_page_affiche(void) {
     s16 x = SCREEN_WIDTH / 2;
-    s16 row = 22;               // fixed spacing (the options page's spacing depends on its number of rows)
+    s16 row = 20;               // fixed spacing (the options page's spacing depends on its number of rows)
     s16 y0 = debut_titre + 30;
     display_text("/graphics/", x, debut_titre, 1, 1); // ("graphics details" is too wide for the box in this font)
-    display_text("/picture/", x, y0, 2, 5);
-    s32 mode = platform_display_mode_get();
-    display_item_t* item = menu_to_display + 9;
-    snprintf(item->text, sizeof(item->text), "/%s/", platform_display_mode_name(mode)); // "/" = centred
-    item->xpos = x;
-    item->ypos = y0 + row;
-    item->font_size = 2;
-    item->color = 1;
-    item->is_fond = 1;
-    item->field_D5 = 0;
-    INIT_TXT_BOX(item);
-    if (gfx_position == 0) {
-        display_box_text_plasma(item, 1);
-    } else {
-        display_text(item->text, item->xpos, item->ypos, 2, 1);
+    s32 count = platform_display_mode_count();
+    s32 current = platform_display_mode_get();
+    for (s32 mode = 0; mode < count; ++mode) {
+        // One row per picture mode; the one in use in colour 1, the others in colour 3.
+        static display_item_t items[8]; // (menu_to_display only has room for the game's own items)
+        if (mode >= (s32)COUNT(items)) break;
+        display_item_t* item = items + mode;
+        snprintf(item->text, sizeof(item->text), "/%s/", platform_display_mode_name(mode)); // "/" = centred
+        item->xpos = x;
+        item->ypos = y0 + mode * row;
+        item->font_size = 2;
+        item->color = (mode == current) ? 1 : 3;
+        item->is_fond = 1;
+        item->field_D5 = 0;
+        INIT_TXT_BOX(item);
+        if (gfx_position == mode) {
+            display_box_text_plasma(item, 1);
+        } else {
+            display_text(item->text, item->xpos, item->ypos, 2, item->color);
+        }
     }
-    display_text(platform_display_mode_description(mode), x, y0 + 2 * row, 2, 3);
+    s16 y_text = y0 + count * row + 4;
     // Switching into or out of 1:1 changes the level's picture size, which happens when a level starts.
     if (gfx_changed_in_level && widescreen_enabled != (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL)) {
-        display_text("/starts with/the next level/", x, y0 + 2 * row + 38, 2, 5);
+        display_text("/starts with/the next level/", x, y_text, 2, 5);
     }
     display_item_t* exit_item = menu_to_display + 8;
     strcpy(exit_item->text, language_txt[232]); // /exit/
@@ -671,7 +681,7 @@ static void gfx_page_affiche(void) {
     exit_item->is_fond = 1;
     exit_item->field_D5 = 0;
     INIT_TXT_BOX(exit_item);
-    if (gfx_position == 1) {
+    if (gfx_position == count) {
         display_box_text_plasma(exit_item, 1);
     } else {
         display_text(exit_item->text, x, debut_sortie, 2, 3);
@@ -1022,7 +1032,7 @@ void DO_COMMANDE_OPTIONS(void) {
         // isn't implemented in Rayverse and locked up the game.
         if (button_released) {
             gfx_page = true;
-            gfx_position = 0;
+            gfx_position = platform_display_mode_get();
             PlaySnd_old(69);
         }
         TestButtonReleased();

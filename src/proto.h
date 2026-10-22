@@ -51,6 +51,8 @@ void menu_rays_main_menu_loaded(void);
 void menu_rays_other_menu_loaded(void);
 void menu_rays_render(u32* top, u32* bottom, const u8* src, s32 w, s32 h, const rgb_t* palette);
 bool menu_rays_active(void);
+bool menu_rays_holding(const u8* src, s32 w, s32 h);
+void menu_rays_render_held(u32* top, u32* bottom, const rgb_t* palette);
 void stereo_capture_before_hud(void);
 bool stereo_frame_has_layers(void);
 void stereo_end_frame(void);

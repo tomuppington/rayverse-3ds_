@@ -527,10 +527,16 @@ static void ctr_present(app_state_t* app_state) {
     // Title-screen menus (bottom_menu.c): the title over animated rays on the top screen, the menu on
     // the bottom screen. Flat, so in 3D the same picture goes to both eyes.
     bool title_menu = !menu_below && menu_rays_active() && src_w == SCREEN_WIDTH_ORIGINAL && src_h == SCREEN_HEIGHT_ORIGINAL;
+    // (Frames where the game shows the last menu picture again, e.g. fading it out: shown the same way.)
+    bool title_menu_held = !menu_below && !title_menu && menu_rays_holding(src, src_w, src_h);
 
-    if (title_menu) {
+    if (title_menu || title_menu_held) {
         static u32 top_picture[SCREEN_WIDTH_ORIGINAL * SCREEN_HEIGHT_ORIGINAL];
-        menu_rays_render(top_picture, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors);
+        if (title_menu) {
+            menu_rays_render(top_picture, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors);
+        } else {
+            menu_rays_render_held(top_picture, ctr_bottom_picture, game->draw_palette.colors);
+        }
         u8* left = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
         ctr_scale_rgb_to_fb(top_picture, src_w, src_h, left);
         if (ctr_stereo_on) {
@@ -559,7 +565,7 @@ static void ctr_present(app_state_t* app_state) {
 
     if (menu_below) {
         ctr_draw_bottom_menu(game_src, game_w, game_h, game->draw_palette.colors);
-    } else if (title_menu) {
+    } else if (title_menu || title_menu_held) {
         ctr_draw_bottom_picture();
     } else if (ctr_bottom_menu_shown) {
         ctr_restore_bottom_console();
