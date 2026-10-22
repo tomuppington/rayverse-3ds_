@@ -293,5 +293,6 @@ int main(int argc, char** argv) {
         game_init(&app_state->game);
     }
     app_state->running = true;
+    stereo_wanted = getenv("STEREO_TEST") != NULL; // record 3D layers for the anaglyph test pictures
     return main_Ray(argc, argv);
 }

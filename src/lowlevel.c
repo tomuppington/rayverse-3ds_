@@ -527,6 +527,7 @@ void DrawSpriteColorFlipX(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
 //16A18
 void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     u8* draw_pos = draw_buf + y * 320 + x;
+    u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
     u8* draw_end = draw_pos + size.y * 320;
     s32 sprite_width = size.x;
     u8* sprite_pos = image_data;
@@ -534,13 +535,14 @@ void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf,
         for (s32 i = 0; i < size.x; ++i) {
             u8 c = sprite_pos[i];
             if (c < 160) {
-                draw_pos[i] = c;
+                { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; }
             } else {
                 i += (c - 160);
             }
         }
         sprite_pos += sprite_width;
         draw_pos += 320;
+        if (mark) mark += 320;
     }
 }
 
@@ -548,6 +550,7 @@ void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf,
 void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -555,13 +558,14 @@ void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* i
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    draw_pos[i] = c;
+                    { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; }
                 } else {
                     i += (c - 160);
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }
@@ -570,6 +574,7 @@ void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* i
 void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_t size /*ecx*/, u8* draw_buf /*edi*/, u8* image_data /*esi*/) {
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -577,11 +582,12 @@ void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c != 0) {
-                    draw_pos[i] = c;
+                    { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; }
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }
@@ -589,6 +595,7 @@ void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_
 //16AFC
 void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     u8* draw_pos = draw_buf + y * 320 + x;
+    u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
     u8* draw_end = draw_pos + size.y * 320;
     s32 sprite_width = size.x;
     u8* sprite_pos = image_data;
@@ -596,13 +603,14 @@ void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_
         for (s32 i = 0; i < size.x; ++i) {
             u8 c = sprite_pos[i];
             if (c < 160) {
-                draw_pos[size.x - i - 1] = c; // reverse order (flipped)
+                { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
             } else {
                 i += (c - 160);
             }
         }
         sprite_pos += sprite_width;
         draw_pos += 320;
+        if (mark) mark += 320;
     }
 }
 
@@ -610,6 +618,7 @@ void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_
 void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -617,13 +626,14 @@ void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    draw_pos[size.x - i - 1] = c; // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 } else {
                     i += (c - 160);
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }
@@ -632,6 +642,7 @@ void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
 void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_t size /*ecx*/, u8* draw_buf /*edi*/, u8* image_data /*esi*/) {
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -639,11 +650,12 @@ void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, ve
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c != 0) {
-                    draw_pos[size.x - i - 1] = c; // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }
@@ -653,6 +665,7 @@ void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2
     saved_sprite_color = color * 8;
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -661,13 +674,14 @@ void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    draw_pos[i] = c | current_color;
+                    { draw_pos[i] = c | current_color; if (mark) mark[i] |= stereo_mark_bits; }
                 } else {
                     i += (c - 160);
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }
@@ -677,6 +691,7 @@ void DrawSpriteColorFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_b
     saved_sprite_color = color * 8;
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
         u8* draw_pos = draw_buf + y * 320 + x;
+        u8* mark = stereo_mask_at(draw_buf, draw_pos); // 3DS port: record drawn pixels for 3D (stereo.c)
         u8* draw_end = draw_pos + size.y * 320;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
@@ -685,13 +700,14 @@ void DrawSpriteColorFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_b
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    draw_pos[size.x - i - 1] = c | current_color; // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c | current_color; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 } else {
                     i += (c - 160);
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += 320;
+            if (mark) mark += 320;
         }
     }
 }

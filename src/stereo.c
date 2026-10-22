@@ -12,9 +12,8 @@
 //   - otherwise                  -> background   (shown deep behind the screen)
 // Each eye's picture is then built by shifting each layer horizontally by its own amount.
 //
-// Limitation: a gameplay pixel that happens to have exactly the same colour as the background pixel
-// behind it is treated as background. Its colour is then taken from a few pixels to the side, which
-// is usually the same or very similar, so this is rarely visible.
+// Pixels drawn in exactly the same colour as what was already there can't be told apart by comparing
+// snapshots, so the drawing routines also record which pixels they draw (stereo_drawn below).
 
 #define STEREO_W 320
 #define STEREO_H 200
@@ -39,10 +38,32 @@ static bool stereo_have_back;
 static bool stereo_have_main;
 static s32 stereo_scene;
 
+// Set by the platform layer: whether the next frames will be shown in 3D. When not, none of the 3D
+// bookkeeping below is done.
+bool stereo_wanted;
+
+// Which pixels the game drew after the background snapshot, recorded by the sprite and tile drawing
+// routines in lowlevel.c (bit 0: gameplay layer, bit 1: HUD/front layer). Comparing colours with the
+// snapshots alone gets a pixel wrong whenever something is drawn over the background in exactly the
+// same colour as what was there; the background then "bled through" the foreground in 3D.
+static u8 stereo_drawn[STEREO_W * STEREO_H];
+static u8* stereo_mark_buffer; // the picture being recorded (NULL: not recording)
+static u8 stereo_mark_bits;
+
+// For the drawing routines: where to record the pixels drawn at draw_pos, or NULL if this drawing isn't
+// being recorded (another buffer, or no 3D).
+static inline u8* stereo_mask_at(const u8* draw_buf, const u8* draw_pos) {
+    if (!stereo_mark_buffer || draw_buf != stereo_mark_buffer) return NULL;
+    return stereo_drawn + (draw_pos - draw_buf);
+}
+
 // Called by the game loop after the background has been drawn.
 void stereo_capture_background(void) {
-    if (!draw_buffer) return;
-    memcpy(stereo_layer_back, draw_buffer, sizeof(stereo_layer_back));
+    if (!draw_buffer || !stereo_wanted) return;
+    memcpy(stereo_layer_back, draw_buffer, STEREO_W * STEREO_H);
+    memset(stereo_drawn, 0, STEREO_W * STEREO_H);
+    stereo_mark_buffer = draw_buffer;
+    stereo_mark_bits = 1;
     stereo_have_back = true;
     stereo_scene = STEREO_SCENE_LEVEL;
 }
@@ -57,8 +78,9 @@ void stereo_capture_map_background(void) {
 // the level dots, before the binocular frame and the level names).
 void stereo_capture_before_hud(void) {
     if (!draw_buffer || !stereo_have_back) return;
-    memcpy(stereo_layer_main, draw_buffer, sizeof(stereo_layer_main));
+    memcpy(stereo_layer_main, draw_buffer, STEREO_W * STEREO_H);
     stereo_have_main = true;
+    stereo_mark_bits = 2; // what is drawn from now on (HUD, text) is the front layer
 }
 
 // True if this frame was drawn by the in-level loop or the world map (layers available). Menus etc.
@@ -83,6 +105,7 @@ bool stereo_frame_usable(const u8* final_frame) {
 void stereo_end_frame(void) {
     stereo_have_back = false;
     stereo_have_main = false;
+    stereo_mark_buffer = NULL;
 }
 
 static inline s32 stereo_clamp_x(s32 x) {
@@ -100,19 +123,18 @@ static inline u32 stereo_load4(const u8* p) {
     return v;
 }
 
-// For 4 pixels at once: where a == b (byte by byte) take the byte of if_equal, else of if_different.
-static inline u32 stereo_pick4(u32 a, u32 b, u32 if_equal, u32 if_different) {
+// For 4 pixels at once: where the byte of x is zero take the byte of if_zero, else of if_nonzero.
+static inline u32 stereo_pick4(u32 x, u32 if_zero, u32 if_nonzero) {
 #if defined(__3DS__)
-    // ARMv6 SIMD: USUB8 of 0 - (a ^ b) sets a per-byte flag where the byte is zero; SEL picks by those flags.
+    // ARMv6 SIMD: USUB8 of 0 - x sets a per-byte flag where the byte is zero; SEL picks by those flags.
     u32 r;
     __asm__("usub8 %0, %1, %2\n\tsel %0, %3, %4"
-            : "=&r"(r) : "r"(0), "r"(a ^ b), "r"(if_equal), "r"(if_different) : "cc");
+            : "=&r"(r) : "r"(0), "r"(x), "r"(if_zero), "r"(if_nonzero) : "cc");
     return r;
 #else
-    u32 x = a ^ b;
     u32 nonzero = (((x & 0x7F7F7F7Fu) + 0x7F7F7F7Fu) | x) & 0x80808080u; // top bit of each nonzero byte
     u32 diff_mask = (nonzero >> 7) * 0xFFu;
-    return (if_equal & ~diff_mask) | (if_different & diff_mask);
+    return (if_zero & ~diff_mask) | (if_nonzero & diff_mask);
 #endif
 }
 
@@ -140,6 +162,7 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
             const u8* fin  = final_frame + y * STEREO_W;
             const u8* main = stereo_layer_main + y * STEREO_W;
             const u8* back = stereo_layer_back + y * STEREO_W;
+            const u8* drawn = stereo_drawn + y * STEREO_W;
             u8* dst = out + y * STEREO_W;
             for (s32 x = 0; x < STEREO_W; ++x) {
                 s32 xf = stereo_clamp_x(x - shift_front);
@@ -148,7 +171,7 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
                 if (f != main[xf] || (f == 0 && back[xf] == 0)) {
                     dst[x] = f;
                 } else {
-                    dst[x] = (main[xm] != back[xm]) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
+                    dst[x] = (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
                 }
             }
         }
@@ -159,11 +182,12 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
         const u8* fin  = final_frame + y * STEREO_W;
         const u8* main = stereo_layer_main + y * STEREO_W;
         const u8* back = stereo_layer_back + y * STEREO_W;
+        const u8* drawn = stereo_drawn + y * STEREO_W;
         u8* dst = out + y * STEREO_W;
         for (s32 x = 0; x < x_lo; ++x) {
             s32 xf = stereo_clamp_x(x - shift_front);
             s32 xm = stereo_clamp_x(x - shift_main);
-            dst[x] = (fin[xf] != main[xf]) ? fin[xf] : (main[xm] != back[xm]) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
+            dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
         }
         // Interior: the three layers read through pointers pre-offset by their shifts.
         const u8* fin_f  = fin  - shift_front;
@@ -171,27 +195,31 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
         const u8* main_m = main - shift_main;
         const u8* back_m = back - shift_main;
         const u8* back_b = back - shift_back;
+        const u8* drawn_f = drawn - shift_front;
+        const u8* drawn_m = drawn - shift_main;
         s32 x = x_lo;
         for (; x + 4 <= x_hi; x += 4) {
             u32 f = stereo_load4(fin_f + x);
             u32 m = stereo_load4(main_m + x);
-            u32 main_or_back = stereo_pick4(m, stereo_load4(back_m + x), stereo_load4(back_b + x), m);
-            u32 r = stereo_pick4(f, stereo_load4(main_f + x), main_or_back, f);
+            u32 is_main = (m ^ stereo_load4(back_m + x)) | (stereo_load4(drawn_m + x) & 0x01010101u);
+            u32 main_or_back = stereo_pick4(is_main, stereo_load4(back_b + x), m);
+            u32 is_front = (f ^ stereo_load4(main_f + x)) | (stereo_load4(drawn_f + x) & 0x02020202u);
+            u32 r = stereo_pick4(is_front, main_or_back, f);
             memcpy(dst + x, &r, 4);
         }
         for (; x < x_hi; ++x) {
             u8 f = fin_f[x];
-            if (f != main_f[x]) {
+            if (f != main_f[x] || (drawn_f[x] & 2)) {
                 dst[x] = f;
             } else {
                 u8 m = main_m[x];
-                dst[x] = (m != back_m[x]) ? m : back_b[x];
+                dst[x] = (m != back_m[x] || (drawn_m[x] & 1)) ? m : back_b[x];
             }
         }
         for (s32 x = MAX(x_hi, x_lo); x < STEREO_W; ++x) {
             s32 xf = stereo_clamp_x(x - shift_front);
             s32 xm = stereo_clamp_x(x - shift_main);
-            dst[x] = (fin[xf] != main[xf]) ? fin[xf] : (main[xm] != back[xm]) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
+            dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
         }
     }
 }
