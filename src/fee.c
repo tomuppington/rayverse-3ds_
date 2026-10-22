@@ -294,7 +294,7 @@ void DO_FEE(obj_t* obj) {
             png_or_fee->flags.alive = 1;
             png_or_fee->flags.flip_x = 1;
             png_or_fee->x = xmap - png_or_fee->offset_bx;
-            s16 y_fee = (SCREEN_HEIGHT < 240) ? SCREEN_HEIGHT - 10 : SCREEN_HEIGHT - 20; // added to account for PC/PS1 difference
+            s16 y_fee = SCREEN_HEIGHT - 10; // (3DS port: the PC height, in line with the text, see INIT_TXT_FEE)
             y = ymap - (png_or_fee->offset_by - y_fee);
             png_or_fee->y = y;
             png_or_fee->screen_x = -png_or_fee->offset_bx;

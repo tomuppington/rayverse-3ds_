@@ -589,13 +589,15 @@ void INIT_NEW_GAME(void) {
     memset(save_zone, 0, sizeof(save_zone));
     memset(&RayEvts, 0, sizeof(RayEvts)); // added; TODO: figure out why RayEvts doesn't 'leak' into a new game?
     INIT_RAY_BEGIN();
-    u8 first_world_is_accessible_flag = (t_world_info[0].state | 1);
+    // New game: forget the progress of every place on the map (the game loaded before may have had
+    // some), and unlock the first one. (Fixed: this used to reset only place 1, so starting a new game
+    // after loading another showed that game's levels; it also kept place 0's other progress flags.)
     for (s32 i = 0; i < 24; ++i) {
-        world_info_t* world_info = t_world_info + 1;
+        world_info_t* world_info = t_world_info + i;
         world_info->nb_cages = 0;
         world_info->state &= ~7;
     }
-    t_world_info[0].state |= first_world_is_accessible_flag;
+    t_world_info[0].state |= 1;
     s32 save_index = positiony - 1;
     loadinforay_t* loadinfo = LoadInfoRay + save_index;
     loadinfo->lives = 3;

@@ -820,7 +820,7 @@ void DISPLAY_TEXT_FEE(void) {
         {
             if (obj->flags.alive)
             {
-                s16 y_fee = (SCREEN_HEIGHT < 240) ? SCREEN_HEIGHT - 10 : SCREEN_HEIGHT - 20; // added to account for PC/PS1 difference
+                s16 y_fee = SCREEN_HEIGHT - 10; // (3DS port: the PC height, in line with the text, see INIT_TXT_FEE)
                 obj->screen_y = y_fee - obj->offset_by;
                 cen_x = ttd.centered_x_pos;
                 obj_x = obj->offset_bx + obj->screen_x;
