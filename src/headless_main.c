@@ -422,7 +422,6 @@ int main(int argc, char** argv) {
     if (widescreen_enabled) headless_display_mode = 0;
     bottom_menu_enabled = getenv("BOTTOM_MENU") != NULL;
     menu_rays_enabled = getenv("MENU_RAYS") != NULL;
-    if (getenv("BG_FILL")) bg_fill_mode = atoi(getenv("BG_FILL")); // 0 repeat, 1 zoom, 2 stretch
     stereo_wanted = getenv("STEREO_TEST") != NULL; // record 3D layers for the anaglyph test pictures
     return main_Ray(argc, argv);
 }

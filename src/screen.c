@@ -126,7 +126,7 @@ void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
 }
 
 // 3DS port: how a background shorter than the screen is extended (see Display_Back_Screen).
-s32 bg_fill_mode = BG_FILL_ZOOM; // (zoom keeps the picture's shape; see bg_fill_scale)
+s32 bg_fill_mode = BG_FILL_REPEAT; // (set per level by widescreen_level_start)
 s32 bg_rows_filled; // (for testing) rows the last frame had to fill
 
 // Scales the background rows first_row..last_row of the window (x1..x2, y1..y2) to cover all of its

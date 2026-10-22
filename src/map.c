@@ -137,6 +137,12 @@ void widescreen_level_start(void) {
     screen_height = h;
     set_default_Bloc_clipping();
     sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
+    // A background shorter than the screen: in these boss arenas, whose camera doesn't move (so the gap
+    // is always the same), it is zoomed to cover the screen; elsewhere its edge row is repeated, as the
+    // zoom would change as the camera moves up and down.
+    bool fixed_arena = (num_world == 1 && num_level == 16) || (num_world == 5 && (num_level == 3 || num_level == 11)) ||
+                       (num_world == 6 && num_level == 4);
+    bg_fill_mode = (h > SCREEN_HEIGHT_ORIGINAL && fixed_arena) ? BG_FILL_ZOOM : BG_FILL_REPEAT;
     if (w > SCREEN_WIDTH_ORIGINAL && !play_window_boxed && num_world == 1 && (num_level == 3 || num_level == 8)) {
         // In these two of Betilla's levels she waits just past the right edge of the original screen
         // (in the others she is next to Rayman from the start); move her past the wider one.

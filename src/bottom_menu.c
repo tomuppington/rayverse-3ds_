@@ -172,6 +172,44 @@ static void status_digits(obj_t* sbar, s32 value, s16 x, s16 y) {
     display_sprite_NoClip(sbar, 28 + value % 10, x + 15, y, 1);
 }
 
+// The box around an animation frame (all its sprites together), relative to the object's position.
+static void status_frame_box(obj_t* obj, anim_t* anim, s32 frame, s32* x0, s32* y0, s32* x1, s32* y1) {
+    u16 layers = anim->layers_per_frame & 0x3FFF;
+    anim_layer_t* layer = anim->layers + frame * layers;
+    *x0 = *y0 = 0x7FFF;
+    *x1 = *y1 = -0x7FFF;
+    for (s32 i = 0; i < layers; ++i) {
+        if (layer[i].sprite_index == 0) continue;
+        sprite_t* sprite = obj->sprites + layer[i].sprite_index;
+        if (sprite->id == 0) continue;
+        *x0 = MIN(*x0, layer[i].x);
+        *x1 = MAX(*x1, layer[i].x + sprite->outer_width);
+        *y0 = MIN(*y0, layer[i].y);
+        *y1 = MAX(*y1, layer[i].y + sprite->outer_height);
+    }
+}
+
+static s32 status_frame_width(obj_t* obj, anim_t* anim, s32 frame) {
+    s32 x0, y0, x1, y1;
+    status_frame_box(obj, anim, frame, &x0, &y0, &x1, &y1);
+    return x1 - x0;
+}
+
+// A frame of the medallion's animation where it is at rest (round, facing the screen). The resting
+// medallion is the narrowest frame; it starts widening when it opens near the end.
+static s32 status_medal_rest_frame(obj_t* obj, anim_t* anim, bool before_electoon) {
+    s32 n = anim->frames_count;
+    if (n <= 0) return 0;
+    if (before_electoon) return MIN(50, n - 1);
+    s32 rest_width = status_frame_width(obj, anim, MIN(50, n - 1));
+    for (s32 f = n / 2; f < n; ++f) {
+        if (status_frame_width(obj, anim, f) > rest_width + 1) {
+            return MAX(0, f - 10);
+        }
+    }
+    return n - 1;
+}
+
 // Redraws the panel if anything on it changed. Returns true if it did.
 bool status_panel_update(void) {
     world_info_t* wi = t_world_info + num_world_choice;
@@ -213,15 +251,19 @@ bool status_panel_update(void) {
         m.sub_etat = (u8)(32 + MAX(0, cages - 1));
         m.anim_index = m.eta[m.main_etat][m.sub_etat].anim_index;
         anim_t* anim = m.animations + m.anim_index;
-        m.anim_frame = (cages == 0 || anim->frames_count == 0) ? 0 : anim->frames_count - 1;
+        // The animation flies the medallion in, rests (while an Electoon joins), then opens and flies off.
+        // Show it at rest: before the Electoon arrives for 0 cages, otherwise just before it opens.
+        m.anim_frame = (u8)status_medal_rest_frame(&m, anim, cages == 0);
         m.flags.flip_x = 0;
         m.scale = 256;
-        m.screen_x = 92 - m.offset_bx;
-        m.screen_y = 150 - m.offset_by;
+        s32 x0, y0, x1, y1;
+        status_frame_box(&m, anim, m.anim_frame, &x0, &y0, &x1, &y1);
+        m.screen_x = 92 - (x0 + x1) / 2; // centred on (92, 124)
+        m.screen_y = 124 - (y0 + y1) / 2;
         display2(&m);
         char text[32];
         snprintf(text, sizeof(text), "/%d of 6/", (int)cages);
-        display_text(text, 92, 196, 2, 5);
+        display_text(text, 92, 200, 2, 5);
     }
 
     // Lives and hit points, tings: the status bar's own sprites, laid out as on the main screen.
