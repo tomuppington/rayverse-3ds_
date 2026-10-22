@@ -13,7 +13,9 @@
 
 #include "input_assist.c"
 
-static PrintConsole ctr_console;
+static PrintConsole ctr_console;       // messages (top 26 rows of the bottom screen)
+static PrintConsole ctr_stats_console; // speed readout (bottom 4 rows), so messages can't scroll it away
+static s64 ctr_compose_ns; // 3D: time spent building the two eye pictures this frame
 static bool ctr_gfx_ready;
 
 //----------------------------------------------------------------------------------------------
@@ -356,9 +358,13 @@ static void ctr_present(app_state_t* app_state) {
         ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
     } else if (src_w == 320 && src_h == 200 && stereo_frame_usable(src)) {
         static u8 eye_buffer[320 * 200];
+        s64 t0 = get_clock();
         stereo_compose_eye(eye_buffer, src, -1, slider);
+        ctr_compose_ns += get_clock() - t0;
         ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        t0 = get_clock();
         stereo_compose_eye(eye_buffer, src, +1, slider);
+        ctr_compose_ns += get_clock() - t0;
         ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
     } else {
         // Slider up, but this screen has no depth layers (menus, map, ...): show it flat to both eyes.
@@ -402,11 +408,16 @@ void ctr_advance_frame(app_state_t* app_state) {
         float seconds = (float)(before_wait - stats_start) / 1e9f;
         s32 fps = (s32)((float)stats_frames / seconds + 0.5f);
         s32 load = (s32)(100.0f * (float)busy_ns_total / (float)(before_wait - stats_start) + 0.5f);
-        printf("\x1b[28;0HScreen drawing: %4.1f ms per frame%s   ", (double)present_ns_total / 1e6 / stats_frames,
-               ctr_stereo_on ? " (3D)" : "");
-        printf("\x1b[29;0HSpeed: %2d fps  CPU: %3d%%  sound gaps: %lu   ", fps, load,
+        consoleSelect(&ctr_stats_console);
+        printf("\x1b[1;0HScreen: %4.1f ms/frame%s", (double)present_ns_total / 1e6 / stats_frames,
+               ctr_stereo_on ? " (3D)" : "     ");
+        if (ctr_stereo_on) printf(", 3D layers %4.1f ms  ", (double)ctr_compose_ns / 1e6 / stats_frames);
+        else printf("                      ");
+        printf("\x1b[2;0HSpeed: %2d fps  CPU: %3d%%  sound gaps: %lu   ", fps, load,
                (unsigned long)(ctr_snd_underruns - underruns_at_start));
+        consoleSelect(&ctr_console);
         present_ns_total = 0;
+        ctr_compose_ns = 0;
         busy_ns_total = 0;
         stats_frames = 0;
         stats_start = before_wait;
@@ -452,7 +463,11 @@ int main(int argc, char** argv) {
 
     gfxInitDefault();
     ctr_gfx_ready = true;
+    consoleInit(GFX_BOTTOM, &ctr_stats_console);
     consoleInit(GFX_BOTTOM, &ctr_console);
+    consoleSetWindow(&ctr_console, 0, 0, 40, 26);
+    consoleSetWindow(&ctr_stats_console, 0, 26, 40, 4);
+    consoleSelect(&ctr_console);
     osSetSpeedupEnable(true); // use the New 3DS's faster CPU mode (harmless on older models)
     atexit(ctr_shutdown);     // registered first, so it runs last (after the game's own cleanup)
 

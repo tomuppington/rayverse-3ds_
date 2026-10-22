@@ -689,7 +689,21 @@ void PlaySnd(s16 snd, s16 obj_id) {
                 // NOTE: I don't yet know what causes the sound to be emitted in this code path.
                 // So, I added this for now (delete again when it's figured out).
                 keyon_loop_allowed = (sound_table[snd] & 0x10) != 0;
-                if (has_sample) KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
+                s32 delayed_voice_id = has_sample ? KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd) : -1;
+                // Fix (3DS port): record this voice like the path above (the PS1 does so when it plays a
+                // delayed sound), so the sound can be interrupted and manage_snd() can stop it. Untracked,
+                // a looping sound played this way (e.g. sound 125, a flying bug's buzz) could never be
+                // stopped, and each new buzz added another copy that got louder and louder.
+                if (delayed_voice_id != -1) {
+                    erase_voice_table(obj_id);
+                    voice_table[delayed_voice_id].obj = obj_id;
+                    voice_table[delayed_voice_id].vol = vol_snd;
+                    voice_table[delayed_voice_id].pan = pan_snd;
+                    voice_table[delayed_voice_id].snd = snd;
+                    if ((sound_table[snd] & 0x10) != 0) {
+                        voice_is_working[delayed_voice_id] = true;
+                    }
+                }
 //                printf("Debug: snd %d, prog %d, tone %d, note %d, vol %d, pan %d\n", snd, prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
 
                 nettoie_pile_snd();
