@@ -210,10 +210,10 @@ void InitClipping(void) {
     if (GameModeVideo != MODE_NORMAL) {
         default_sprite_clipping();
     } else if (is_fee || (num_world == world_6_cake && num_level == 4) || get_casse_brique_active()) {
-        set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], (TabH2[0] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+        set_play_window(0);
         sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
     } else {
-        set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], (TabH2[SizeScreen] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+        set_play_window(SizeScreen);
         sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
         N_CLRSCR(DrawBufferNormal);
     }
@@ -337,7 +337,7 @@ void DO_OPTIONS_IN_GAME(void) {
     MENU_RETURN = 0;
     if (GoMenu == 1) {
         if (byte_96884 == 64) {
-            set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], (TabH2[0] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+            set_play_window(0);
             sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             ++GoMenu;
         } else {
@@ -398,7 +398,7 @@ void DO_OPTIONS_IN_GAME(void) {
             OptionGame = 0;
             new_key();
             if (GameModeVideo == MODE_NORMAL) {
-                set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], (TabH2[SizeScreen] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+                set_play_window(SizeScreen);
                 sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
                 N_CLRSCR(DrawBufferNormal);
             } else {
@@ -1729,13 +1729,13 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
         if (GameModeVideo == MODE_NORMAL) {
             CaptureVideo(draw_buffer, EffetBufferNormal, 1);
             if (RayEvts.firefly) {
-                set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], (TabH2[0] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+                set_play_window(0);
                 sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             }
             if (!bottom_menu_active()) { // 3DS port: the top screen keeps the game picture (no fade)
                 DO_FADE_OUT();
             }
-            set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], (TabH2[SizeScreen] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+            set_play_window(SizeScreen);
             sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             N_CLRSCR(DrawBufferNormal);
         } else {

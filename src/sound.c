@@ -728,7 +728,9 @@ void PlaySnd(s16 snd, s16 obj_id) {
             }
             if ((snd == 203 || snd == 237 || snd == 209 || snd == 225 || snd == 236) && (dead_time == 64 || dead_time == 128)) {
                 if (ps1_music_enabled) {
-                    ps1_music_fade_out(); // PS1: the music fades out when a boss is beaten
+                    // PS1 (start_cd_bbdead): the music fades out and the victory jingle (sound 21) plays.
+                    ps1_music_fade_out();
+                    PlaySnd_old(21);
                 } else {
                     start_cd_bbdead();
                 }

@@ -78,6 +78,23 @@ void update_display_map(big_map_t* a1) {
     draw_buffer = DrawBufferNormalIni;
 }
 
+// 3DS port: a 4:3 play area (320x240) in the middle of the 400x240 picture, for levels where the
+// full width doesn't suit (as Rayman Redemption does for its boss levels). The picture stays 1:1 and
+// the lives and tings counters stay in the screen's corners; the sides are black.
+bool play_window_boxed;
+
+// Width of each black side (0 when the play area fills the picture).
+s32 play_window_border(void) {
+    return play_window_boxed ? (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2 : 0;
+}
+
+// The play window for screen size setting 'size' (the PC version's smaller-window option; 0 = full).
+void set_play_window(s32 size) {
+    s32 border = play_window_border();
+    set_xywhmap(TabW1[size] + border, (TabW2[size] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL - border),
+                TabH1[size], (TabH2[size] + SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL));
+}
+
 //5C9F0
 void set_default_Bloc_clipping(void) {
     Bloc_lim_H1 = 0;
@@ -88,6 +105,8 @@ void set_default_Bloc_clipping(void) {
     Bloc_lim_W1 = 4;
 #endif
     Bloc_lim_W2 = SCREEN_WIDTH;
+    Bloc_lim_W1 += play_window_border();
+    Bloc_lim_W2 -= play_window_border();
 }
 
 
@@ -101,14 +120,24 @@ void widescreen_level_start(void) {
     // Levels whose background scrolls in vertical strips (type 1) are laid out for 320 pixels across.
     bool strip_background = Type_Scroll[10 * (num_world - 1) + Num_Fond] == 1;
     s32 h = SCREEN_HEIGHT_ORIGINAL;
+    // Levels played in a 4:3 window in the middle of the picture (see play_window_boxed): Moskito's
+    // Nest, where the full width is too slow, and levels narrower than the screen (small boss arenas).
+    bool heavy_level = num_world == 1 && (num_level == 14 || num_level == 15);
+    bool narrow_level = 16 * mp.width < SCREEN_WIDTH_MAX && 16 * mp.width >= SCREEN_WIDTH_ORIGINAL;
+    play_window_boxed = false;
     if (widescreen_enabled && GameModeVideo == MODE_NORMAL && !fairy_level && !strip_background &&
-        16 * mp.width >= SCREEN_WIDTH_MAX && 16 * mp.height >= SCREEN_HEIGHT_MAX) {
+        16 * mp.height >= SCREEN_HEIGHT_MAX && (16 * mp.width >= SCREEN_WIDTH_MAX || narrow_level)) {
         w = SCREEN_WIDTH_MAX;
         h = SCREEN_HEIGHT_MAX;
+        play_window_boxed = heavy_level || narrow_level;
     }
     screen_width = w;
     screen_height = h;
     set_default_Bloc_clipping();
+    sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
+    if (play_window_boxed) {
+        memset(DrawBufferNormal, 0, SCREEN_WIDTH * SCREEN_HEIGHT); // black sides
+    }
     if (GameModeVideo == MODE_NORMAL) {
         calc_bande_scroll_y(plan0_height); // the background's vertical scrolling depends on the screen height
     }
@@ -116,6 +145,7 @@ void widescreen_level_start(void) {
 
 // Back to the original 320 pixels (world map, menus).
 void widescreen_level_end(void) {
+    play_window_boxed = false;
     screen_width = SCREEN_WIDTH_ORIGINAL;
     screen_height = SCREEN_HEIGHT_ORIGINAL;
     set_default_Bloc_clipping();
@@ -127,7 +157,9 @@ void set_xymapini(void) {
     ymapmax = 16 * mp.height - Bloc_lim_H2;
     xmapmaxini = 16 * mp.width - SCREEN_WIDTH;
     ymapmaxini = 16 * mp.height - SCREEN_HEIGHT;
-    if (xmapmax < 0) {
+    // (3DS port: in a 4:3 window, a map narrower than the window sits at the window's right edge, i.e.
+    // in the middle of the picture, like in the PC version's smaller-window mode.)
+    if (xmapmax < 0 && !play_window_boxed) {
         xmapmax = 0;
     }
     if (ymapmax < 0) {

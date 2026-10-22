@@ -158,7 +158,7 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
         s32 stride = plan0_stride; // widescreen: the background buffer holds 3 copies of the picture per row
         for (s32 i = 0; i < NbBande; ++i) {
             bande_t* bande = Bande + i;
-            u8* source_buffer_pos = bande->source_buffer_pos + bande->field_6 + w1;
+            u8* source_buffer_pos = bande->source_buffer_pos + bande->field_6 + w1 - play_window_border(); // (3DS port: 4:3 window)
             u8* dest_buffer_pos = bande->draw_buffer_pos + SCREEN_WIDTH * bande->offset - SCREEN_WIDTH * v68 + w1;
             s32 draw_height = bande->length;
             s32 v34 = bande->offset - v68;
@@ -205,6 +205,7 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                 if (source_x > SCREEN_WIDTH) {
                     source_x -= plan_width;
                 }
+                source_x += play_window_border(); // (3DS port: 4:3 window)
                 sprite_t* scroll_diff_sprite = ScrollDiffSprites->sprites + (i + 1);
                 if (source_x + scroll_diff_sprite->outer_width > w1) {
                     vec2b_t size = {scroll_diff_sprite->outer_width, scroll_diff_sprite->outer_height};

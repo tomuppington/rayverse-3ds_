@@ -92,7 +92,8 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
 
         // Draw background
         if (BackgroundOn && FondAutorise == 1) {
-            Calcul_Deplacement_Bande(xmap, plan0_width, plan0_height);
+            // (3DS port: in a 4:3 window the background lines up with the window, see play_window_boxed.)
+            Calcul_Deplacement_Bande(xmap + play_window_border(), plan0_width, plan0_height);
             Display_Back_Screen(plan0_width, plan0_height, Bloc_lim_W1, Bloc_lim_H1, Bloc_lim_W2, Bloc_lim_H2);
         } else {
             memset(draw_buffer, 0, SCREEN_WIDTH*SCREEN_HEIGHT);

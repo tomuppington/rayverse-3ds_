@@ -320,11 +320,12 @@ void DISPLAY_FIXE(s32 time) {
                     DISPLAY_BLACKBOX(13, 0, width, Bloc_lim_H1, -1, 0);
                     DISPLAY_BLACKBOX(13, Bloc_lim_H1, Bloc_lim_W1 - 15, height + 5 - Bloc_lim_H1, -1, 0);
                 }
+                s16 box_right = SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL; // 3DS port: tings counter in the top-right corner
                 if (Bloc_lim_H1 - 5 >= 23) {
-                    DISPLAY_BLACKBOX(241, 4, 68, 23, -1, 0);
+                    DISPLAY_BLACKBOX(241 + box_right, 4, 68, 23, -1, 0);
                 } else {
-                    DISPLAY_BLACKBOX(241, 4, 68, Bloc_lim_H1 - 4, -1, 0);
-                    DISPLAY_BLACKBOX(Bloc_lim_W2, Bloc_lim_H1, 312 - Bloc_lim_W2, 28 - Bloc_lim_H1, -1, 0);
+                    DISPLAY_BLACKBOX(241 + box_right, 4, 68, Bloc_lim_H1 - 4, -1, 0);
+                    DISPLAY_BLACKBOX(Bloc_lim_W2, Bloc_lim_H1, 312 + box_right - Bloc_lim_W2, 28 - Bloc_lim_H1, -1, 0);
                 }
             }
             obj_t* obj = level.objects + sbar_obj_id;
