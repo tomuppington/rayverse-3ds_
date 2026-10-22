@@ -317,16 +317,16 @@ static void status_draw_medal_rest(obj_t* medal, s32 cages, s32 cx, s32 cy) {
 }
 
 // Levels without cages don't have the medallion's pictures: the panel uses the resting medallion (for
-// 0 to 6 cages) kept from the last level that had them (0x00RRGGBB, with bit 24 set where opaque).
-static u32 status_medal_cache[7][STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
+// 0 to 6 cages) kept from the last level that had them, as colour numbers (0: transparent). The
+// medallion uses the same colour numbers in every level, so the panel's palette colours them.
+static u8 status_medal_cache[7][STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
 static bool status_medal_cache_ready;
 static const void* status_medal_cache_sprites; // (filled once per level)
-static u32 status_medal_rgb[BOTTOM_W * BOTTOM_H]; // the kept picture on the panel (0: none)
 
 // The kept pictures are also saved in the game folder (made from the player's game data), so that
 // they are there from the start, even if the first level played has no cages.
 #define STATUS_MEDAL_FILE "RAY3DS.MED"
-static const char status_medal_magic[8] = "RAYMED1";
+static const char status_medal_magic[8] = "RAYMED2";
 
 static void status_medal_cache_save(void) {
     static bool saved;
@@ -354,10 +354,51 @@ static void status_medal_cache_load(void) {
     fclose(fp);
 }
 
+// The panel's colours: always the bright ones of the normal levels. A few levels darken or tint the
+// whole palette (night and cave levels, the Tarayzan level); the panel keeps the brightest palette seen
+// so far instead (the counters, medallion and text use the same colour slots in every level, and the
+// normal levels all give them the same colours). Remembered on the SD card next to the game data, as it
+// comes from the game's own files.
+#define STATUS_PAL_FILE "RAY3DS.PAL"
+static const char status_pal_magic[8] = "RAYPAL1";
+static rgb_t status_bright_pal[256];
+static u32 status_bright_sum;
+
+static const rgb_t* status_panel_palette(void) {
+    static bool loaded;
+    if (!loaded) {
+        loaded = true;
+        FILE* fp = fopen(STATUS_PAL_FILE, "rb");
+        if (fp) {
+            char magic[8];
+            u32 sum;
+            if (fread(magic, 1, 8, fp) == 8 && memcmp(magic, status_pal_magic, 8) == 0 &&
+                fread(&sum, sizeof(sum), 1, fp) == 1 && fread(status_bright_pal, sizeof(status_bright_pal), 1, fp) == 1) {
+                status_bright_sum = sum;
+            }
+            fclose(fp);
+        }
+    }
+    const rgb_t* level_pal = rvb[current_pal_id].colors;
+    u32 sum = 0;
+    for (s32 i = 1; i < 112; ++i) sum += (u32)level_pal[i].r + level_pal[i].g + level_pal[i].b;
+    if (sum > status_bright_sum) {
+        memcpy(status_bright_pal, level_pal, sizeof(status_bright_pal));
+        status_bright_sum = sum;
+        FILE* fp = fopen(STATUS_PAL_FILE, "wb");
+        if (fp) {
+            fwrite(status_pal_magic, 1, 8, fp);
+            fwrite(&sum, sizeof(sum), 1, fp);
+            fwrite(status_bright_pal, sizeof(status_bright_pal), 1, fp);
+            fclose(fp);
+        }
+    }
+    return status_bright_pal;
+}
+
 static void status_medal_cache_fill(obj_t* medal) {
     if (status_medal_cache_ready && status_medal_cache_sprites == medal->sprites) return;
     static u8 scratch[STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
-    const rgb_t* pal = rvb[current_pal_id].colors;
     u8* saved_buffer = draw_buffer;
     s32 saved_w = screen_width, saved_h = screen_height;
     s32 cx0, cx1, cy0, cy1;
@@ -371,7 +412,7 @@ static void status_medal_cache_fill(obj_t* medal) {
         status_draw_medal_rest(medal, n, STATUS_MEDAL_CACHE / 2, STATUS_MEDAL_CACHE / 2);
         for (s32 i = 0; i < STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE; ++i) {
             u8 q = scratch[i];
-            status_medal_cache[n][i] = q ? (1u << 24) | ((u32)pal[q].r << 16) | ((u32)pal[q].g << 8) | pal[q].b : 0;
+            status_medal_cache[n][i] = q;
         }
     }
     draw_buffer = saved_buffer;
@@ -398,10 +439,11 @@ bool status_panel_update(void) {
     // cage's medallion is on the main screen (the panel's medallion follows it), and once after.
     obj_t* medal = status_find_object(TYPE_197_MEDAILLON_TOON);
     bool medal_live = medal && medal->is_active && medal->sub_etat >= 32 && medal->sub_etat <= 37;
-    static bool animating_shown;
-    bool animating = id_Cling_1up != -1 || id_Cling_Pow != -1 || medal_live;
-    if (key == status_panel_key && !animating && !animating_shown) return false;
-    animating_shown = animating;
+    // (Only when one of those animations shows a new picture, not every frame.)
+    if (medal_live) key ^= ((u32)(medal->anim_frame + 1) * 0x2545F491u) ^ ((u32)medal->sub_etat * 0x9E3779B9u) ^ ((u32)medal->main_etat * 0x7FEB352Du);
+    if (id_Cling_1up != -1) key ^= ((u32)level.objects[id_Cling_1up].anim_frame + 1) * 0x68E31DA4u ^ (u32)level.objects[id_Cling_1up].anim_index * 0x1B873593u ^ (level.objects[id_Cling_1up].timer == 0 ? 0x5bd1e995u : 0);
+    if (id_Cling_Pow != -1) key ^= ((u32)level.objects[id_Cling_Pow].anim_frame + 1) * 0xB5297A4Du ^ (u32)level.objects[id_Cling_Pow].anim_index * 0xCC9E2D51u ^ (level.objects[id_Cling_Pow].timer == 0 ? 0x3c6ef372u : 0);
+    if (key == status_panel_key) return false;
     status_panel_key = key;
 
     // Draw with the game's routines into the panel: point the drawing at it for a moment.
@@ -424,7 +466,6 @@ bool status_panel_update(void) {
     if (wi->text) {
         display_text(wi->text, BOTTOM_W / 2, 61, 2, wi->color);
     }
-    memset(status_medal_rgb, 0, sizeof(status_medal_rgb));
 
     // Cages of this part of the world: the medallion with its Electoons, as when a cage is freed.
     s32 cages = MIN(6, wi->nb_cages);
@@ -454,13 +495,14 @@ bool status_panel_update(void) {
         if (shown >= 0) status_draw_medal_rest(medal, shown, STATUS_MEDAL_X, STATUS_MEDAL_Y);
     } else if (status_medal_cache_load(), status_medal_cache_ready) {
         // No medallion in this level: the picture kept from a level that had one.
-        const u32* pic = status_medal_cache[cages];
+        const u8* pic = status_medal_cache[cages];
         for (s32 y = 0; y < STATUS_MEDAL_CACHE; ++y) {
             s32 py = STATUS_MEDAL_Y - STATUS_MEDAL_CACHE / 2 + y;
             if (py < 0 || py >= BOTTOM_H) continue;
             for (s32 x = 0; x < STATUS_MEDAL_CACHE; ++x) {
                 s32 px = STATUS_MEDAL_X - STATUS_MEDAL_CACHE / 2 + x;
-                if (px >= 0 && px < BOTTOM_W) status_medal_rgb[py * BOTTOM_W + px] = pic[y * STATUS_MEDAL_CACHE + x];
+                u8 q = pic[y * STATUS_MEDAL_CACHE + x];
+                if (q && px >= 0 && px < BOTTOM_W) status_panel[py * BOTTOM_W + px] = q;
             }
         }
     }
@@ -668,9 +710,6 @@ static void panel565_build(const rgb_t* pp) {
                     if (q) {
                         col[fy] = pal565[q];
                         mask[fy] = 1;
-                    } else if (status_medal_rgb[j]) {
-                        col[fy] = BOTTOM_RGB565(status_medal_rgb[j] & 0xFFFFFF);
-                        mask[fy] = 1;
                     } else {
                         mask[fy] = 0;
                     }
@@ -733,7 +772,7 @@ void bottom_level_render(u16* fb, bool paused, const u8* src, s32 src_w, s32 src
     // The panel (redrawn only if something on it changed) in the screen's order, in the level's colours.
     (void)pp;
     if (status_panel_update()) {
-        panel565_build(rvb[current_pal_id].colors);
+        panel565_build(status_panel_palette());
     }
     dark_rays_update();
 

@@ -5,3 +5,7 @@
 
 # The player's own title logo (see bottom_menu.c), never part of the project
 LOGO.PNG
+
+# Caches the 3DS port writes next to the game data (made from the game's files)
+RAY3DS.MED
+RAY3DS.PAL
