@@ -99,6 +99,7 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
             flocon_clipping(Bloc_lim_H1, Bloc_lim_H2 - 6, Bloc_lim_W1, Bloc_lim_W2 - 4);
             display_flocons_behind(); //TODO
         }
+        stereo_capture_background(); // 3DS port: snapshot for stereoscopic 3D (see stereo.c)
 
         DRAW_MAP(DrawBufferNormal, &BIG_MAP);
         display_grp_stars();
@@ -115,6 +116,7 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
                              Bloc_lim_H2 - Bloc_lim_H1,
                              Bloc_lim_W2 - Bloc_lim_W1 + 4); //TODO
 
+        stereo_capture_before_hud(); // 3DS port: snapshot for stereoscopic 3D (see stereo.c)
         if (is_fee) {
             DISPLAY_TEXT_FEE();
         } else {

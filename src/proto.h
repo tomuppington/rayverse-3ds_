@@ -19,6 +19,13 @@ void ps1_play_music(s16 world, s16 level);
 bool ps1_music_next_segment(void);
 void ps1_music_moskito(bool accelerate);
 void ps1_music_update_in_level(void);
+// stereo.c
+void stereo_capture_background(void);
+void stereo_capture_before_hud(void);
+bool stereo_frame_has_layers(void);
+void stereo_end_frame(void);
+bool stereo_frame_usable(const u8* final_frame);
+void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength);
 
 // lowlevel.c
 void display_emptypicture(void);

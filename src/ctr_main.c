@@ -177,6 +177,12 @@ static const ctr_display_mode_t ctr_display_modes[CTR_DISPLAY_MODE_COUNT] = {
 static s32 ctr_display_mode = CTR_DISPLAY_FILL_WIDE;
 static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 in wide mode)
 
+// Stereoscopic 3D: active whenever the 3D slider is up. The 3DS can't combine 3D with the 800-pixel
+// wide mode, so in 3D the wide modes are shown at half their width (800x240 -> 400x240 etc.).
+// The depth comes from stereo.c; the slider position scales it.
+static bool ctr_stereo_on;          // slider up this frame
+static bool ctr_stereo_configured;  // display currently set up for 3D
+
 typedef struct ctr_scale_axis_t {
     s32 out_size;
     s32 src_size;
@@ -206,11 +212,18 @@ static void ctr_build_axis(ctr_scale_axis_t* axis, s32 src_size, s32 out_size) {
 
 static void ctr_setup_display_mode(s32 src_w, s32 src_h) {
     const ctr_display_mode_t* mode = &ctr_display_modes[ctr_display_mode];
-    if (gfxIsWide() != mode->wide) {
-        gfxSetWide(mode->wide);
+    bool wide = mode->wide && !ctr_stereo_on;
+    if (ctr_stereo_on) {
+        if (gfxIsWide()) gfxSetWide(false); // wide mode must be off before 3D is turned on
+        gfxSet3D(true);
+    } else {
+        gfxSet3D(false);
+        if (gfxIsWide() != wide) gfxSetWide(wide);
     }
-    ctr_fb_w = mode->wide ? 800 : CTR_TOP_W;
-    ctr_build_axis(&ctr_axis_x, src_w, MIN(mode->out_w, ctr_fb_w));
+    ctr_stereo_configured = ctr_stereo_on;
+    ctr_fb_w = wide ? 800 : CTR_TOP_W;
+    s32 out_w = (mode->wide && !wide) ? mode->out_w / 2 : mode->out_w;
+    ctr_build_axis(&ctr_axis_x, src_w, MIN(out_w, ctr_fb_w));
     ctr_build_axis(&ctr_axis_y, src_h, MIN(mode->out_h, CTR_TOP_H));
 }
 
@@ -239,25 +252,7 @@ static void ctr_cycle_display_mode(void) {
 #define CTR_MAX_SRC_W 320
 static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3];
 
-static void ctr_present(app_state_t* app_state) {
-    game_state_t* game = &app_state->game;
-    image_t* image = &game->draw_buffer;
-    // The game sometimes points draw_buffer at a different buffer (effects); honour that, as engine.c does.
-    const u8* src = (draw_buffer && draw_buffer != image->memory) ? draw_buffer : image->memory;
-    s32 src_w = MIN(image->width, CTR_MAX_SRC_W), src_h = image->height;
-
-    if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h) {
-        ctr_setup_display_mode(src_w, src_h);
-    }
-
-    // This frame's palette as packed B,G,R pixels.
-    static u32 pal[256];
-    for (s32 i = 0; i < 256; ++i) {
-        rgb_t c = game->draw_palette.colors[i];
-        pal[i] = (u32)c.b | ((u32)c.g << 8) | ((u32)c.r << 16);
-    }
-
-    u8* fb = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL);
+static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
     s32 w = ctr_axis_x.out_size;
     s32 h = ctr_axis_y.out_size;
     if (w < ctr_fb_w || h < CTR_TOP_H) {
@@ -302,6 +297,43 @@ static void ctr_present(app_state_t* app_state) {
             }
         }
     }
+}
+
+static void ctr_present(app_state_t* app_state) {
+    game_state_t* game = &app_state->game;
+    image_t* image = &game->draw_buffer;
+    // The game sometimes points draw_buffer at a different buffer (effects); honour that, as engine.c does.
+    const u8* src = (draw_buffer && draw_buffer != image->memory) ? draw_buffer : image->memory;
+    s32 src_w = MIN(image->width, CTR_MAX_SRC_W), src_h = image->height;
+
+    float slider = osGet3DSliderState();
+    ctr_stereo_on = slider > 0.05f;
+    if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h ||
+        ctr_stereo_configured != ctr_stereo_on) {
+        ctr_setup_display_mode(src_w, src_h);
+    }
+
+    // This frame's palette as packed B,G,R pixels.
+    static u32 pal[256];
+    for (s32 i = 0; i < 256; ++i) {
+        rgb_t c = game->draw_palette.colors[i];
+        pal[i] = (u32)c.b | ((u32)c.g << 8) | ((u32)c.r << 16);
+    }
+
+    if (!ctr_stereo_on) {
+        ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+    } else if (src_w == 320 && src_h == 200 && stereo_frame_usable(src)) {
+        static u8 eye_buffer[320 * 200];
+        stereo_compose_eye(eye_buffer, src, -1, slider);
+        ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        stereo_compose_eye(eye_buffer, src, +1, slider);
+        ctr_scale_to_fb(eye_buffer, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
+    } else {
+        // Slider up, but this screen has no depth layers (menus, map, ...): show it flat to both eyes.
+        ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+        ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL));
+    }
+    stereo_end_frame();
 }
 
 //----------------------------------------------------------------------------------------------
@@ -390,7 +422,7 @@ int main(int argc, char** argv) {
     printf("Rayman 1 PC port - bring your own data\n\n");
     printf("Controls: B jump, Y punch, X action,\nDown+Left/Right crawl, A confirm,\nSTART menu, SELECT pause.\n");
     printf("Hold L+R+SELECT to quit.\n");
-    printf("Tap the touch screen to change the\npicture size.\n\n");
+    printf("Tap the touch screen to change the\npicture size. Slide the 3D slider up\nfor 3D.\n\n");
 
     if (!ctr_check_game_data()) {
         ctr_wait_for_start();

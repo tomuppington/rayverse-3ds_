@@ -19,7 +19,8 @@ The PlayStation version's data is a different format and does not work.
 ## Controls
 
 D-pad / Circle Pad: move · B: jump · Y: punch · X: action · Down+Left/Right: crawl · A: confirm ·
-START: menu · SELECT: pause · tap touch screen: change picture size · hold L+R+SELECT: quit
+START: menu · SELECT: pause · tap touch screen: change picture size · 3D slider: stereoscopic 3D ·
+hold L+R+SELECT: quit
 
 ## Status
 

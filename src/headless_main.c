@@ -120,6 +120,30 @@ static void headless_save_screenshot(surface_t* surface, const char* name) {
 static bool headless_script_held[128]; // keys held according to the script
 static bool headless_sent_held[128];   // keys the game currently sees as held
 
+// Red/cyan anaglyph of the stereoscopic 3D output (for checking the 3D layers on a PC).
+static void headless_save_anaglyph(app_state_t* app_state, const char* name) {
+    game_state_t* game = &app_state->game;
+    const u8* final_frame = (draw_buffer && draw_buffer != game->draw_buffer.memory) ? draw_buffer : game->draw_buffer.memory;
+    if (!stereo_frame_usable(final_frame)) {
+        fprintf(headless_log, "[frame %lld] anaglyph %s: no 3D layers this frame\n", (long long)headless_frame, name);
+        return;
+    }
+    static u8 left[320 * 200], right[320 * 200];
+    stereo_compose_eye(left, final_frame, -1, 1.0f);
+    stereo_compose_eye(right, final_frame, +1, 1.0f);
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s_3d.ppm", headless_out_dir, name);
+    FILE* fp = fopen(path, "wb");
+    if (!fp) return;
+    fprintf(fp, "P6 320 200 255\n");
+    for (s32 i = 0; i < 320 * 200; ++i) {
+        rgb_t l = game->draw_palette.colors[left[i]];
+        rgb_t r = game->draw_palette.colors[right[i]];
+        fputc(l.r, fp); fputc(r.g, fp); fputc(r.b, fp);
+    }
+    fclose(fp);
+}
+
 static void headless_key(u8 sc, bool down) {
     headless_script_held[sc & 0x7F] = down;
 }
@@ -161,6 +185,7 @@ static void headless_run_script(app_state_t* app_state) {
             headless_release_at[sc] = (s32)headless_frame + 4;
         } else if (strcmp(e->kind, "shot") == 0) {
             headless_save_screenshot(app_state->active_surface, e->arg);
+            if (getenv("STEREO_TEST")) headless_save_anaglyph(app_state, e->arg);
         } else if (strcmp(e->kind, "mark") == 0) {
             fprintf(headless_log, "[frame %lld] MARK %s\n", (long long)headless_frame, e->arg);
         } else if (strcmp(e->kind, "end") == 0) {
@@ -197,6 +222,7 @@ void ctr_advance_frame(app_state_t* app_state) {
         fwrite(sb->samples, sizeof(s16) * 2, sb->sample_count, headless_audio_file);
     }
 
+    stereo_end_frame();
     ++headless_frame;
     app_state->flip_clock = get_clock();
     if (!app_state->running) {
