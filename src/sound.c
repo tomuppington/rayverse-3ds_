@@ -643,14 +643,21 @@ void PlaySnd(s16 snd, s16 obj_id) {
                 break;
         }
 
-        if (prog != -1 && prog != 255) {
+        // Fix (3DS port): sounds whose table entry has no recording (prog 255, e.g. sound 3 = Rayman
+        // releasing the fist) used to skip this whole block, including the bookkeeping below that
+        // records the object's last sound. The PS1 code (rayman-ps1-decomp) only treats prog == -1
+        // as "nothing to do" and still records the sound. Without this, Rayman's last sound stayed
+        // "fist wind-up" after a punch, so the next wind-up counted as already playing and started at
+        // volume 0 - silent on the Moskito ride, where Rayman makes no other sounds between punches.
+        bool has_sample = (prog != 255);
+        if (prog != -1) {
             erase_pile_snd(obj_id);
             s32 voll = vol_l(Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd); // NOTE: has no effect?
             s32 volr = vol_r(Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd); // NOTE: has no effect?
 
             if (frame_snd[snd] == 0) {
                 // NOTE: the PS1 version implements left/right directional sound here, using SsUtKeyOn
-                s32 voice_id = KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
+                s32 voice_id = has_sample ? KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd) : -1;
                 if (voice_id != -1) {
                     erase_voice_table(obj_id);
                     voice_table[voice_id].obj = obj_id;
@@ -664,7 +671,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
             } else {
                 // NOTE: I don't yet know what causes the sound to be emitted in this code path.
                 // So, I added this for now (delete again when it's figured out).
-                KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
+                if (has_sample) KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
 //                printf("Debug: snd %d, prog %d, tone %d, note %d, vol %d, pan %d\n", snd, prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
 
                 nettoie_pile_snd();
