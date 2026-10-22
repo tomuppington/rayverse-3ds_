@@ -575,6 +575,105 @@ void END_GENERAL_SCREEN(void) {
     }
 }
 
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+// 3DS port: when the PlayStation soundtrack is installed, the "music" option chooses between it and the
+// PC (DOS) soundtrack instead of switching music on and off.
+#define MUSIC_TEXT_FIRST  (ps1_music_available ? "ps1" : "on")
+#define MUSIC_TEXT_SECOND (ps1_music_available ? "dos" : "off")
+#define MUSIC_FIRST_CHOSEN (ps1_music_available ? ps1_music_enabled : options.music_enabled)
+#else
+#define MUSIC_TEXT_FIRST  "on"
+#define MUSIC_TEXT_SECOND "off"
+#define MUSIC_FIRST_CHOSEN (options.music_enabled)
+#endif
+
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+// 3DS port: "setup keys" and "setup pad" are hidden (Rayverse doesn't implement those screens, and the
+// 3DS buttons are fixed). The other options keep their numbers; they are just drawn closer together and
+// the cursor skips the hidden ones.
+static inline bool option_hidden(s32 i) { return i == 2 || i == 3; }
+static inline s32 option_row(s32 i) { return (i > 3) ? i - 2 : i; }
+#else
+static inline bool option_hidden(s32 i) { return false; }
+static inline s32 option_row(s32 i) { return i; }
+#endif
+
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+// 3DS port: "graphics details" opens a second page of the options box with the 3DS picture settings
+// (the PC version's graphics details screen was about PC graphics hardware and isn't implemented).
+// It is a page of the options screen rather than a separate menu screen, so it works the same from
+// the title menu and from the in-game menu.
+static bool gfx_page;     // the graphics page is showing
+static s32 gfx_position;  // 0: picture mode, 1: exit
+static bool gfx_changed_in_level;
+
+static void gfx_page_commande(void) {
+    TestCompteur();
+    bool repeat_ok = button_released || (delai_repetition < compteur && (compteur % repetition) == 0);
+    if (SelectButPressed() && button_released) {
+        gfx_page = false; // back to the options page
+        PlaySnd_old(77);
+        RESET_TOUCHE(SC_ESCAPE);
+    } else if ((upjoy() || downjoy()) && repeat_ok) {
+        PlaySnd_old(68);
+        gfx_position = 1 - gfx_position;
+    } else if (gfx_position == 0 && (rightjoy() || leftjoy() || ValidButPressed()) && repeat_ok) {
+        PlaySnd_old(68);
+        s32 count = platform_display_mode_count();
+        s32 mode = platform_display_mode_get();
+        mode = leftjoy() ? (mode + count - 1) % count : (mode + 1) % count;
+        platform_display_mode_set(mode);
+        if (RaymanDansUneMapDuJeu) gfx_changed_in_level = true;
+    } else if (gfx_position == 1 && ValidButPressed() && button_released) {
+        gfx_page = false;
+        PlaySnd_old(69);
+    }
+    TestButtonReleased();
+}
+
+static void gfx_page_affiche(void) {
+    s16 x = SCREEN_WIDTH / 2;
+    s16 row = ecart_options + 15;
+    s16 y0 = debut_options;
+    display_text("/graphics/", x, debut_titre, 1, 1); // ("graphics details" is too wide for the box in this font)
+    display_text("picture", x, y0, 2, 5);
+    s32 mode = platform_display_mode_get();
+    display_item_t* item = menu_to_display + 9;
+    strcpy(item->text, platform_display_mode_name(mode));
+    item->xpos = x;
+    item->ypos = y0 + row;
+    item->font_size = 2;
+    item->color = 1;
+    item->is_fond = 1;
+    item->field_D5 = 0;
+    INIT_TXT_BOX(item);
+    if (gfx_position == 0) {
+        display_box_text_plasma(item, 1);
+    } else {
+        display_text(item->text, item->xpos, item->ypos, 2, 1);
+    }
+    display_text(platform_display_mode_description(mode), x, y0 + 2 * row, 2, 3);
+    // Switching into or out of 1:1 changes the level's picture size, which happens when a level starts.
+    if (gfx_changed_in_level && widescreen_enabled != (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL)) {
+        display_text("/starts with/the next level/", x, y0 + 2 * row + 38, 2, 5);
+    }
+    display_item_t* exit_item = menu_to_display + 8;
+    strcpy(exit_item->text, language_txt[232]); // /exit/
+    exit_item->xpos = x;
+    exit_item->ypos = debut_sortie;
+    exit_item->font_size = 2;
+    exit_item->color = 3;
+    exit_item->is_fond = 1;
+    exit_item->field_D5 = 0;
+    INIT_TXT_BOX(exit_item);
+    if (gfx_position == 1) {
+        display_box_text_plasma(exit_item, 1);
+    } else {
+        display_text(exit_item->text, x, debut_sortie, 2, 3);
+    }
+}
+#endif
+
 //4A44C
 void INIT_OPTIONS_CHOICE(void) {
     /*if (WindowsLance == 0) {
@@ -609,7 +708,15 @@ void INIT_OPTIONS_CHOICE(void) {
         nbre_options = 5;
     }
     first_option = 0;
-    general_init_screen(20, 60, 5);
+    {
+        // Space the rows for the options that are shown (see option_hidden).
+        s16 all_options = nbre_options;
+        for (s32 i = 0; i < all_options; ++i) {
+            if (option_hidden(i)) --nbre_options;
+        }
+        general_init_screen(20, 60, 5);
+        nbre_options = all_options;
+    }
     if (byte_96883) {
         options.sound_volume = byte_E4CD9;
         byte_96883 = 0;
@@ -620,11 +727,15 @@ void INIT_OPTIONS_CHOICE(void) {
     }
     ExitMenu = 0;
     sortie_options = 0;
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+    gfx_page = false;
+    gfx_changed_in_level = false;
+#endif
 }
 
 //4A628
 void INIT_AFFICHE_ECRAN_OPTIONS(void) {
-    char* v32 = "off";
+    const char* v32 = MUSIC_TEXT_SECOND;
     u8 v28[8] = {5, 5, 5, 5, 5, 5, 3, 0}; //0x5050505;
 //    u8 v29[4] = {5, 5, 3, 0}; // 0x30505; //dword_49294[1]
     u32 v30 = 0; //dword_49294[2];
@@ -633,7 +744,7 @@ void INIT_AFFICHE_ECRAN_OPTIONS(void) {
     menu_to_display[9].field_D5 = 0;
     menu_to_display[9].color = 1;
     char v39[4];
-    strncpy(v39, "on", 4);
+    strncpy(v39, MUSIC_TEXT_FIRST, 4);
     for (s32 i = first_option; i <= first_option + nbre_options; ++i) {
         display_item_t* to_display = menu_to_display + i;
         to_display->font_size = 2;
@@ -670,7 +781,7 @@ void INIT_AFFICHE_ECRAN_OPTIONS(void) {
                 default:
                     break;
             }
-            to_display->ypos = i * (ecart_options + 15) + debut_options;
+            to_display->ypos = option_row(i) * (ecart_options + 15) + debut_options;
         }
         INIT_TXT_BOX(to_display);
     }
@@ -738,8 +849,15 @@ void AFFICHE_ECRAN_OPTIONS(void) {
     if (OptionGame) {
         CadreTrans(word_E4CEC_x, word_E4CF0_y, word_E4CF4_w, word_E4CEE_h);
     }
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+    if (gfx_page) {
+        gfx_page_affiche();
+        return;
+    }
+#endif
     display_text(language_txt[181], SCREEN_WIDTH / 2, debut_titre, 1, 1); // /options/
     for (s32 option_index = first_option; option_index <= first_option + nbre_options; ++option_index) {
+        if (option_hidden(option_index)) continue;
         s16 x = menu_to_display[option_index].xpos;
         s16 y = menu_to_display[option_index].ypos;
         if (option_index == position) {
@@ -759,16 +877,16 @@ void AFFICHE_ECRAN_OPTIONS(void) {
             const char* other_text;
             s32 v18;
             s32 v8;
-            if (options.music_enabled) {
-                nonselected_text = "off";
-                v18 = v6 + calc_largmax_text("on", -1, 8, 1, 2) + 32;
+            if (MUSIC_FIRST_CHOSEN) {
+                nonselected_text = MUSIC_TEXT_SECOND;
+                v18 = v6 + calc_largmax_text(MUSIC_TEXT_FIRST, -1, 8, 1, 2) + 32;
                 v8 = v6 + 16;
-                other_text = "on";
+                other_text = MUSIC_TEXT_FIRST;
             } else {
-                nonselected_text = "on";
+                nonselected_text = MUSIC_TEXT_FIRST;
                 v18 = v6 + 16;
-                v8 = v6 + calc_largmax_text("on", -1, 8, 1, 2) + 32;
-                other_text = "off";
+                v8 = v6 + calc_largmax_text(MUSIC_TEXT_FIRST, -1, 8, 1, 2) + 32;
+                other_text = MUSIC_TEXT_SECOND;
             }
             display_text(nonselected_text, v18, y, 2, 5);
             if (position == option_index) {
@@ -801,6 +919,12 @@ void AFFICHE_ECRAN_OPTIONS(void) {
 
 //4AF28
 void DO_COMMANDE_OPTIONS(void) {
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+    if (gfx_page) {
+        gfx_page_commande();
+        return;
+    }
+#endif
     TestCompteur();
     if (SelectButPressed()) {
         MENU_RETURN = 1;
@@ -809,22 +933,38 @@ void DO_COMMANDE_OPTIONS(void) {
             (button_released || (delai_repetition < compteur && (compteur % repetition) == 0))
     ) {
         PlaySnd_old(68);
-        if (position == first_option) {
-            position = option_exit;
-        } else {
-            --position;
-        }
+        do {
+            if (position == first_option) {
+                position = option_exit;
+            } else {
+                --position;
+            }
+        } while (option_hidden(position));
     }
     if (downjoy() && !rightjoy() && !leftjoy() &&
         (button_released || (delai_repetition < compteur && (compteur % repetition) == 0))
     ) {
         PlaySnd_old(68);
-        if (position == option_exit) {
-            position = first_option;
-        } else {
-            ++position;
-        }
+        do {
+            if (position == option_exit) {
+                position = first_option;
+            } else {
+                ++position;
+            }
+        } while (option_hidden(position));
     }
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+    if (position == 0 && button_released && ps1_music_available && (ValidButPressed() || rightjoy() || leftjoy())) {
+        // PS1 / DOS soundtrack (see MUSIC_TEXT_FIRST above)
+        PlaySnd_old(68);
+        options.music_enabled = 1;
+        if (OptionMusicCdActive) {
+            MusicCdActive = 1;
+        }
+        music_select_ps1(!ps1_music_enabled);
+        platform_settings_changed();
+    } else
+#endif
     if (position == 0 && button_released && (ValidButPressed() || rightjoy() || leftjoy())) {
         options.music_enabled = !options.music_enabled;
         if (options.music_enabled) {
@@ -872,10 +1012,14 @@ void DO_COMMANDE_OPTIONS(void) {
         sortie_options = 1;
         byte_96883 = 1;
     } else if (position == 4 && ValidButPressed()) {
-#ifdef __3DS__
-        // 3DS: the 'graphics details' screen is not implemented in Rayverse yet (all its functions are
-        // stubs), and entering it locks up the game. Its settings only concern PC graphics hardware,
-        // so on the 3DS we simply ignore this menu entry.
+#if defined(__3DS__) || defined(RAYVERSE_HEADLESS)
+        // 3DS: open the 3DS picture settings page (see gfx_page above) instead of the PC screen, which
+        // isn't implemented in Rayverse and locked up the game.
+        if (button_released) {
+            gfx_page = true;
+            gfx_position = 0;
+            PlaySnd_old(69);
+        }
         TestButtonReleased();
         return;
 #endif

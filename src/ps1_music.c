@@ -255,6 +255,8 @@ static const s32 ps1_excerpt_offsets[4] = {300, 900, 600, 1200}; // in CD sector
 #define PS1_FADE_IN_SAMPLES (44100 * 3 / 2)
 
 bool ps1_music_enabled;
+bool ps1_music_available;   // the MusicPS1 folder is there
+bool ps1_music_preferred = true; // the player's choice (Options > Music: PS1 / DOS), set by the platform layer
 static s16 ps1_music_world;
 static s16 ps1_music_level;
 static s16 ps1_music_cmd;
@@ -267,7 +269,8 @@ static bool ps1_level_music_after_jingle; // restart the level music once the de
 void ps1_music_init(void) {
     FILE* fp = fopen("MusicPS1/JUNGLE1.ogg", "rb");
     if (!fp) fp = fopen("MusicPS1/GENE.ogg", "rb");
-    ps1_music_enabled = (fp != NULL);
+    ps1_music_available = (fp != NULL);
+    ps1_music_enabled = ps1_music_available && ps1_music_preferred;
     if (fp) fclose(fp);
     printf("Music: %s\n", ps1_music_enabled ? "PlayStation soundtrack (MusicPS1 folder)" : "PC CD soundtrack");
 }
@@ -331,6 +334,32 @@ static bool ps1_music_run(void) {
     }
     is_ogg_playing = false;
     return false;
+}
+
+// Options > Music: switch between the PlayStation and the PC (DOS) soundtrack. The music stops and
+// starts again in the chosen soundtrack: in a level from TestCdLoop (cdTime = 0), elsewhere from
+// DoCdRap, as when a track ends.
+void music_select_ps1(bool ps1) {
+    ps1_music_preferred = ps1;
+    bool enable = ps1 && ps1_music_available;
+    if (enable == ps1_music_enabled) return;
+    ps1_music_enabled = enable;
+    stop_ogg(&ogg_cd_track);
+    stop_cd();
+    ps1_death_music_armed = true;
+    ps1_level_music_after_jingle = false;
+    if (RaymanDansUneMapDuJeu) {
+        // In a level (e.g. from the in-game menu): start the level's music in the new soundtrack now,
+        // so the menu doesn't fill the gap with its own music.
+        if (ps1_music_enabled) {
+            ps1_play_music(num_world, num_level);
+        } else {
+            play_cd_track(map_cd_tracks[22 * (num_world - 1) + num_level - 1], true);
+        }
+        cdTime = 1;
+    } else {
+        cdTime = 0;
+    }
 }
 
 // Start the music for a world/level (world 0 = special music, see the table).

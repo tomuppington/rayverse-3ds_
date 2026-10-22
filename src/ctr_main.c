@@ -154,35 +154,33 @@ void surface_resize(surface_t* surface, int width, int height) {
     surface_clear(surface);
 }
 
-// Display modes (tap the touch screen to cycle). The New 3DS / New 3DS XL top screen has a "wide"
-// mode of 800x240 for 2D images (normally used for 3D), giving twice the horizontal resolution. That
-// lets the 320-pixel-wide game be scaled much more sharply - and by an exact 2x in two of the modes.
-//   0 FILL_WIDE  - whole screen, 800x240 wide mode (x2.5 wide, x1.2 tall)            [default]
-//   1 CRT_WIDE   - 640x240 wide mode: the 4:3 shape of a 1995 monitor, exactly x2 wide
-//   2 PIXEL_WIDE - 640x200 wide mode: exactly x2 wide, x1 tall - perfectly even pixels, smaller
-//   3 FILL_400   - whole screen at the normal 400x240 resolution (the previous default)
-//   4 NATIVE     - levels are drawn at the screen's own 400x240 resolution, one game pixel per screen
-//                  pixel, showing more of each level in every direction (see SCREEN_WIDTH in types.h).
-//                  Menus, the world map and small levels keep the original picture, filling the screen.
-// The chosen mode is remembered in RAY3DS.CFG in the game folder.
+// Picture modes (chosen in Options > Graphics details, or tap the touch screen to cycle):
+//   FULLSCREEN - in levels the game draws a 400x240 picture, the top screen's own resolution: one game
+//                pixel per screen pixel, and more of each level visible in every direction (see
+//                SCREEN_WIDTH in types.h). Menus and small levels keep the original 320x200 picture,
+//                filling the screen; the world map is shown unscaled in the middle.
+//   ORIGINAL   - the original 320x200 picture, one game pixel per screen pixel, centred.
+//   STRETCH    - the original picture zoomed to fill the screen, using the New 3DS's 800x240 "wide" mode
+//                for twice the horizontal sharpness.
 // Scaling uses area-weighted sampling: each screen pixel takes the colours of the game pixels it
 // covers, in proportion. Pixels stay sharp; only the screen pixels that straddle two game pixels get
 // blended, which avoids the uneven, shimmering look of plain pixel-repeating at non-whole scales.
-enum { CTR_DISPLAY_FILL_WIDE, CTR_DISPLAY_CRT_WIDE, CTR_DISPLAY_PIXEL_WIDE, CTR_DISPLAY_FILL_400, CTR_DISPLAY_WIDE_VIEW, CTR_DISPLAY_MODE_COUNT };
+// The chosen mode is remembered in RAY3DS.CFG in the game folder.
+enum { CTR_DISPLAY_FULLSCREEN, CTR_DISPLAY_ORIGINAL, CTR_DISPLAY_STRETCH, CTR_DISPLAY_MODE_COUNT };
 typedef struct ctr_display_mode_t {
     const char* name;
     bool wide;
     s16 out_w, out_h; // in framebuffer pixels
-    bool wide_view;   // levels drawn wider (more of the level visible)
+    bool wide_view;   // levels drawn at 400x240 (more of the level visible)
+    const char* menu_name;        // for the graphics details menu page, in the game's font
+    const char* menu_description; // ('/' starts a new centred line)
 } ctr_display_mode_t;
 static const ctr_display_mode_t ctr_display_modes[CTR_DISPLAY_MODE_COUNT] = {
-    { "Fill screen, sharp (800x240)",   true,  800, 240, false },
-    { "Original 4:3 shape (640x240)",   true,  640, 240, false },
-    { "Pixel perfect (640x200)",        true,  640, 200, false },
-    { "Fill screen, standard (400x240)", false, 400, 240, false },
-    { "1:1 PIXELS: see more of each level", false, 400, 240, true },
+    { "Fullscreen (1:1 pixels, 400x240)", false, 400, 240, true,  "fullscreen", "/see more of/each level/" },
+    { "Original (1:1 pixels, 320x200)",   false, 320, 200, false, "original",   "/original picture/at its real size/" },
+    { "Stretch (zoomed to fill, sharp)",  true,  800, 240, false, "stretch",    "/original picture/zoomed to fill/" },
 };
-static s32 ctr_display_mode = CTR_DISPLAY_FILL_WIDE;
+static s32 ctr_display_mode = CTR_DISPLAY_FULLSCREEN;
 static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 in wide mode)
 
 // Stereoscopic 3D: active whenever the 3D slider is up. The 3DS can't combine 3D with the 800-pixel
@@ -276,30 +274,59 @@ static void ctr_apply_display_mode(void) {
     widescreen_enabled = ctr_display_modes[ctr_display_mode].wide_view;
 }
 
+// For the graphics details menu page (menu.c).
+s32 platform_display_mode_count(void) { return CTR_DISPLAY_MODE_COUNT; }
+s32 platform_display_mode_get(void) { return ctr_display_mode; }
+const char* platform_display_mode_name(s32 mode) { return ctr_display_modes[mode].menu_name; }
+const char* platform_display_mode_description(s32 mode) { return ctr_display_modes[mode].menu_description; }
+static void ctr_set_display_mode(s32 mode);
+void platform_display_mode_set(s32 mode) { ctr_set_display_mode(mode); }
+
 static void ctr_cycle_display_mode(void) {
-    ctr_display_mode = (ctr_display_mode + 1) % CTR_DISPLAY_MODE_COUNT;
+    ctr_set_display_mode((ctr_display_mode + 1) % CTR_DISPLAY_MODE_COUNT);
+}
+
+static void ctr_set_display_mode(s32 mode) {
+    ctr_display_mode = mode;
     ctr_apply_display_mode();
     printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
     if (widescreen_enabled != (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL) && RaymanDansUneMapDuJeu) {
         printf(" (takes effect when the next level\n  starts)\n");
     }
+    platform_settings_changed();
+}
+
+// Save the 3DS settings (picture mode, soundtrack) to RAY3DS.CFG in the game folder.
+void platform_settings_changed(void) {
     FILE* fp = fopen(CTR_CONFIG_FILE, "w");
     if (fp) {
-        fprintf(fp, "display_mode=%d\n", (int)ctr_display_mode);
+        fprintf(fp, "picture=%d\n", (int)ctr_display_mode);
+        fprintf(fp, "music=%s\n", ps1_music_preferred ? "ps1" : "dos");
         fclose(fp);
     }
 }
 
 static void ctr_load_config(void) {
     FILE* fp = fopen(CTR_CONFIG_FILE, "r");
-    if (!fp) return;
-    int mode = 0;
-    if (fscanf(fp, "display_mode=%d", &mode) == 1 && mode >= 0 && mode < CTR_DISPLAY_MODE_COUNT) {
-        ctr_display_mode = mode;
-        ctr_apply_display_mode();
-        printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
+    if (!fp) {
+        ctr_apply_display_mode(); // defaults
+        return;
+    }
+    char line[64];
+    while (fgets(line, sizeof(line), fp)) {
+        int value = 0;
+        if (sscanf(line, "picture=%d", &value) == 1 && value >= 0 && value < CTR_DISPLAY_MODE_COUNT) {
+            ctr_display_mode = value;
+        } else if (strncmp(line, "music=", 6) == 0) {
+            ps1_music_preferred = strncmp(line + 6, "dos", 3) != 0;
+        } else if (sscanf(line, "display_mode=%d", &value) == 1) {
+            // Earlier builds had five modes: 4 was 1:1, 2 pixel perfect, the others zoomed to fill.
+            ctr_display_mode = (value == 4) ? CTR_DISPLAY_FULLSCREEN : (value == 2) ? CTR_DISPLAY_ORIGINAL : CTR_DISPLAY_STRETCH;
+        }
     }
     fclose(fp);
+    ctr_apply_display_mode();
+    printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
 }
 
 // Copy the game's 320x200, 256-colour picture to the top screen, scaling it on the way.

@@ -14,12 +14,22 @@ void linux_end_frame(app_state_t* app_state);
 void message_box(const char* message);
 // ps1_music.c
 extern bool ps1_music_enabled;
+extern bool ps1_music_available;
+extern bool ps1_music_preferred;
+void music_select_ps1(bool ps1);
+void platform_settings_changed(void); // save the 3DS settings (picture mode, soundtrack)
 void ps1_music_init(void);
 void ps1_play_music(s16 world, s16 level);
 bool ps1_music_next_segment(void);
 void ps1_music_moskito(bool accelerate);
 void ps1_music_update_in_level(bool rayman_dying);
 void widescreen_level_start(void);
+// Display modes (3DS port; provided by the platform layer, used by the graphics details menu page)
+s32 platform_display_mode_count(void);
+s32 platform_display_mode_get(void);
+void platform_display_mode_set(s32 mode);
+const char* platform_display_mode_name(s32 mode);        // in the game's font: a-z 0-9 : ! ? . '
+const char* platform_display_mode_description(s32 mode);
 void calc_bande_scroll_y(s16 height);
 void widescreen_level_end(void);
 extern bool widescreen_enabled;

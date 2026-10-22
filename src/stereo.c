@@ -69,21 +69,21 @@ void stereo_capture_background(void) {
 }
 
 // World map: the binoculars' work buffer (EffetBufferNormal) is not laid out like the screen: its top-left
-// pixel is the screen's (JumelleXMin, JumelleYMin), and only the binoculars' box (LargeurJumelle x
-// HauteurJumelle) is drawn. This copies it into screen positions (black elsewhere), so the layers can be
-// compared with the final picture pixel by pixel.
+// pixel is the screen's (JumelleXMin, JumelleYMin). This copies it into screen positions, so it can be
+// compared with the final picture pixel by pixel (the circles on screen are copied from it, so inside
+// them the two always match - including the edge rows).
 static void stereo_align_from_jumelle(u8* dst, const u8* work) {
     for (s32 y = 0; y < STEREO_H; ++y) {
         u8* d = dst + y * STEREO_W;
         s32 sy = y - JumelleYMin;
-        if (sy < 0 || sy >= HauteurJumelle || sy >= STEREO_H) {
+        if (sy < 0 || sy >= STEREO_H) {
             memset(d, 0, STEREO_W);
             continue;
         }
         const u8* s = work + sy * STEREO_W;
         for (s32 x = 0; x < STEREO_W; ++x) {
             s32 sx = x - JumelleXMin;
-            d[x] = (sx >= 0 && sx < LargeurJumelle && sx < STEREO_W) ? s[sx] : 0;
+            d[x] = (sx >= 0 && sx < STEREO_W) ? s[sx] : 0;
         }
     }
 }

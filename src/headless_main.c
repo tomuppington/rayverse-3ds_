@@ -117,6 +117,24 @@ static void headless_save_screenshot(surface_t* surface, const char* name) {
     fprintf(headless_log, "[frame %lld] screenshot %s\n", (long long)headless_frame, name);
 }
 
+// Display modes for the graphics details menu page (the same list as the 3DS; only 1:1 changes anything here).
+static const char* headless_mode_names[3] = {"fullscreen", "original", "stretch"};
+static const char* headless_mode_descriptions[3] = {"/see more of/each level/", "/original picture/at its real size/",
+    "/original picture/zoomed to fill/"};
+static s32 headless_display_mode = 2;
+s32 platform_display_mode_count(void) { return 3; }
+s32 platform_display_mode_get(void) { return headless_display_mode; }
+const char* platform_display_mode_name(s32 mode) { return headless_mode_names[mode]; }
+const char* platform_display_mode_description(s32 mode) { return headless_mode_descriptions[mode]; }
+void platform_settings_changed(void) {
+    fprintf(headless_log, "[frame %lld] settings saved: picture %d, music %s\n", (long long)headless_frame, headless_display_mode, ps1_music_preferred ? "ps1" : "dos");
+}
+void platform_display_mode_set(s32 mode) {
+    headless_display_mode = mode;
+    widescreen_enabled = (mode == 0);
+    fprintf(headless_log, "[frame %lld] display mode %d (%s)\n", (long long)headless_frame, mode, headless_mode_names[mode]);
+}
+
 static bool headless_script_held[128]; // keys held according to the script
 static bool headless_sent_held[128];   // keys the game currently sees as held
 
@@ -307,6 +325,7 @@ int main(int argc, char** argv) {
     }
     app_state->running = true;
     widescreen_enabled = getenv("WIDESCREEN") != NULL; // test the wide view (3DS display option)
+    if (widescreen_enabled) headless_display_mode = 0;
     stereo_wanted = getenv("STEREO_TEST") != NULL; // record 3D layers for the anaglyph test pictures
     return main_Ray(argc, argv);
 }
