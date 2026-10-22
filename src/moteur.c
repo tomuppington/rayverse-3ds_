@@ -318,7 +318,7 @@ bool in_action_zone(s16 screen_x, s16 screen_y, obj_t* obj, u8 active) {
         }
         in_zone = 1;
         if (((s16) screen_x < -284 - zdiff_x) || ((s16) screen_x > zdiff_x + 444 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL)) ||
-                ((s16) screen_y < -144 - zdiff_y) || ((s16) screen_y > zdiff_y + 304) ||
+                ((s16) screen_y < -144 - zdiff_y) || ((s16) screen_y > zdiff_y + 304 + (SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL)) ||
                 (obj->y + obj->offset_by < -30) || (obj->y > mp.height * 16 + 30) ||
                 (obj->x + offset_bx * 2 < 0) || (obj->x > mp.width * 16)
         ) {
@@ -1804,7 +1804,7 @@ void move_down_ray(void) {
     ray.y += ray.speed_y;
     calc_obj_pos(&ray);
     if (ray.main_etat == 2) {
-        if ((scroll_end_y - ymap > ray.speed_y) && ray.screen_y >= 100) {
+        if ((scroll_end_y - ymap > ray.speed_y) && ray.screen_y >= 100 + (SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL) / 2) {
             v_scroll_speed = ray.speed_y;
         } else {
             v_scroll_speed = 0;
@@ -1820,7 +1820,7 @@ void recale_ray_pos(void) {
         return;
     }
     if (scroll_y == -1) {
-        s16 unk_y_1 = ((ray_zdc_h >> 1) - ray.offset_by) + 114; // 136 in the PS1 version
+        s16 unk_y_1 = ((ray_zdc_h >> 1) - ray.offset_by) + 114 + (SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL) / 2; // 136 in the PS1 version (3DS port: centred on taller screens)
         if ((ray.main_etat == 2 && !(ray.sub_etat == 15 && ray_Suphelico_bis)) || screen_trembling) {
             if ((ymap != scroll_end_y && (unk_y_1 < ray.screen_y - ray.speed_y) && ray.speed_y > 0) ||
                 (ymap != scroll_start_y && (-ray.offset_hy - 16 >= ray.screen_y) && ray.speed_y < 0))

@@ -80,8 +80,8 @@ void DrawBlackBoxNormal(u8* buffer /*edi*/, s32 x /*edx*/, s32 y /*ecx*/, s32 he
         height += y;
         y = 0;
     }
-    if (y + height > 200) {
-        height = 200 - y;
+    if (y + height > SCREEN_HEIGHT) {
+        height = SCREEN_HEIGHT - y;
     }
     if (x + width > SCREEN_WIDTH) {
         width = SCREEN_WIDTH - x;
@@ -392,10 +392,10 @@ void sprite_clipping(s32 xmin, s32 xmax, s32 ymin, s32 ymax) {
     if (xmax > SCREEN_WIDTH) xmax = SCREEN_WIDTH;
     XMAX = xmax;
     if (ymin < 0) ymin = 0;
-    if (ymin > 200) ymin = 200;
+    if (ymin > SCREEN_HEIGHT) ymin = SCREEN_HEIGHT;
     YMIN = ymin;
     if (ymax < 0) ymax = 0;
-    if (ymax > 200) ymax = 200;
+    if (ymax > SCREEN_HEIGHT) ymax = SCREEN_HEIGHT;
     YMAX = ymax;
 }
 

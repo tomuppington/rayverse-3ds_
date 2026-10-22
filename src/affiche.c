@@ -591,11 +591,11 @@ void DISPLAY_BLACKBOX(s16 x, s16 y, s16 width, s16 height, s16 font_size, u8 is_
     if (y < 0) {
         clip_y = 0;
         clip_height = y + height;
-    } else if (y > 200) {
-        clip_y = 200;
+    } else if (y > SCREEN_HEIGHT) {
+        clip_y = SCREEN_HEIGHT;
     }
-    if (clip_height + clip_y > 200) {
-        clip_height = 200 - clip_y;
+    if (clip_height + clip_y > SCREEN_HEIGHT) {
+        clip_height = SCREEN_HEIGHT - clip_y;
     }
 
     if (clip_width > 0 && clip_height > 0) {

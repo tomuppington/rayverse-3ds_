@@ -20,6 +20,7 @@ bool ps1_music_next_segment(void);
 void ps1_music_moskito(bool accelerate);
 void ps1_music_update_in_level(bool rayman_dying);
 void widescreen_level_start(void);
+void calc_bande_scroll_y(s16 height);
 void widescreen_level_end(void);
 extern bool widescreen_enabled;
 extern s32 plan0_stride;

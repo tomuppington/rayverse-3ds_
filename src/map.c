@@ -81,7 +81,7 @@ void update_display_map(big_map_t* a1) {
 //5C9F0
 void set_default_Bloc_clipping(void) {
     Bloc_lim_H1 = 0;
-    Bloc_lim_H2 = 200;
+    Bloc_lim_H2 = SCREEN_HEIGHT;
 #ifdef FIX_BLACK_BAR_ON_THE_LEFT
     Bloc_lim_W1 = 0;
 #else
@@ -91,23 +91,33 @@ void set_default_Bloc_clipping(void) {
 }
 
 
-// Widescreen (3DS port): called once a level has been loaded. Uses the wider picture if it is enabled
-// and the level is wide enough; otherwise the original 320 pixels.
+// Native resolution (3DS port): called once a level has been loaded. Uses the 400x240 picture if the
+// 1:1 display mode is on and the level is big enough; otherwise the original 320x200.
 void widescreen_level_start(void) {
     s32 w = SCREEN_WIDTH_ORIGINAL;
     // Betilla's levels (cutscenes) keep the original picture: their text is laid out for it.
     bool fairy_level = (num_world == 1 && (num_level == 3 || num_level == 8 || num_level == 17)) ||
                        (num_world == 2 && num_level == 11) || (num_world == 3 && num_level == 11);
-    if (widescreen_enabled && GameModeVideo == MODE_NORMAL && 16 * mp.width >= SCREEN_WIDTH_MAX && !fairy_level) {
+    // Levels whose background scrolls in vertical strips (type 1) are laid out for 320 pixels across.
+    bool strip_background = Type_Scroll[10 * (num_world - 1) + Num_Fond] == 1;
+    s32 h = SCREEN_HEIGHT_ORIGINAL;
+    if (widescreen_enabled && GameModeVideo == MODE_NORMAL && !fairy_level && !strip_background &&
+        16 * mp.width >= SCREEN_WIDTH_MAX && 16 * mp.height >= SCREEN_HEIGHT_MAX) {
         w = SCREEN_WIDTH_MAX;
+        h = SCREEN_HEIGHT_MAX;
     }
     screen_width = w;
+    screen_height = h;
     set_default_Bloc_clipping();
+    if (GameModeVideo == MODE_NORMAL) {
+        calc_bande_scroll_y(plan0_height); // the background's vertical scrolling depends on the screen height
+    }
 }
 
 // Back to the original 320 pixels (world map, menus).
 void widescreen_level_end(void) {
     screen_width = SCREEN_WIDTH_ORIGINAL;
+    screen_height = SCREEN_HEIGHT_ORIGINAL;
     set_default_Bloc_clipping();
 }
 
@@ -116,7 +126,7 @@ void set_xymapini(void) {
     xmapmax = 16 * mp.width - Bloc_lim_W2;
     ymapmax = 16 * mp.height - Bloc_lim_H2;
     xmapmaxini = 16 * mp.width - SCREEN_WIDTH;
-    ymapmaxini = 16 * mp.height - 200;
+    ymapmaxini = 16 * mp.height - SCREEN_HEIGHT;
     if (xmapmax < 0) {
         xmapmax = 0;
     }
@@ -175,8 +185,8 @@ void set_xywhmap(s16 xmin, s16 xmax, s16 ymin, s16 ymax) {
     Bloc_lim_W1 = xmin;
     Bloc_lim_W2 = xmax;
 
-    if (ymax > 200) {
-        Bloc_lim_H2 = 200;
+    if (ymax > SCREEN_HEIGHT) {
+        Bloc_lim_H2 = SCREEN_HEIGHT;
     }
     if (ymin < 0) {
         Bloc_lim_H1 = 0;

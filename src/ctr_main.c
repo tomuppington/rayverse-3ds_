@@ -161,9 +161,9 @@ void surface_resize(surface_t* surface, int width, int height) {
 //   1 CRT_WIDE   - 640x240 wide mode: the 4:3 shape of a 1995 monitor, exactly x2 wide
 //   2 PIXEL_WIDE - 640x200 wide mode: exactly x2 wide, x1 tall - perfectly even pixels, smaller
 //   3 FILL_400   - whole screen at the normal 400x240 resolution (the previous default)
-//   4 WIDE_VIEW  - like FILL_WIDE, but levels are drawn 400 pixels wide instead of 320, showing more of
-//                  each level (see SCREEN_WIDTH in types.h); 400 -> 800 is an exact 2x. Menus, the
-//                  world map and levels narrower than 400 pixels keep the original picture.
+//   4 NATIVE     - levels are drawn at the screen's own 400x240 resolution, one game pixel per screen
+//                  pixel, showing more of each level in every direction (see SCREEN_WIDTH in types.h).
+//                  Menus, the world map and small levels keep the original picture, filling the screen.
 // The chosen mode is remembered in RAY3DS.CFG in the game folder.
 // Scaling uses area-weighted sampling: each screen pixel takes the colours of the game pixels it
 // covers, in proportion. Pixels stay sharp; only the screen pixels that straddle two game pixels get
@@ -180,7 +180,7 @@ static const ctr_display_mode_t ctr_display_modes[CTR_DISPLAY_MODE_COUNT] = {
     { "Original 4:3 shape (640x240)",   true,  640, 240, false },
     { "Pixel perfect (640x200)",        true,  640, 200, false },
     { "Fill screen, standard (400x240)", false, 400, 240, false },
-    { "WIDE VIEW: see more of each level", true, 800, 240, true },
+    { "1:1 PIXELS: see more of each level", false, 400, 240, true },
 };
 static s32 ctr_display_mode = CTR_DISPLAY_FILL_WIDE;
 static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 in wide mode)
@@ -272,7 +272,7 @@ static void ctr_cycle_display_mode(void) {
     ctr_apply_display_mode();
     printf("Display: %s\n", ctr_display_modes[ctr_display_mode].name);
     if (widescreen_enabled != (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL) && RaymanDansUneMapDuJeu) {
-        printf(" (the level width changes when the\n  next level starts)\n");
+        printf(" (takes effect when the next level\n  starts)\n");
     }
     FILE* fp = fopen(CTR_CONFIG_FILE, "w");
     if (fp) {
@@ -313,6 +313,27 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
     s32 oy = (CTR_TOP_H - h) / 2;
     s32 col_bytes = h * 3;
     s32 first_px = CTR_TOP_H - oy - h; // framebuffer index (from the bottom) of the lowest picture pixel
+
+    // 1:1 (the native-resolution mode): no scaling at all, convert each pixel straight into the
+    // framebuffer. Four pixels (12 bytes) are written as three 32-bit words.
+    if (w == src_w && h == src_h && (h & 3) == 0) {
+        for (s32 sx = 0; sx < src_w; ++sx) {
+            const u8* col = src + (src_h - 1) * src_w + sx; // bottom pixel of this column
+            u32* d = (u32*)(fb + ((ox + sx) * CTR_TOP_H + first_px) * 3);
+            for (s32 q = 0; q < h; q += 4) {
+                u32 c0 = pal[col[0]];
+                u32 c1 = pal[col[-src_w]];
+                u32 c2 = pal[col[-2 * src_w]];
+                u32 c3 = pal[col[-3 * src_w]];
+                col -= 4 * src_w;
+                d[0] = c0 | (c1 << 24);
+                d[1] = (c1 >> 8) | (c2 << 16);
+                d[2] = (c2 >> 16) | (c3 << 8);
+                d += 3;
+            }
+        }
+        return;
+    }
 
     // Row tables, bottom row first (the framebuffer's order): source offsets and blend shares.
     static s32 row_off0[CTR_TOP_H], row_off1[CTR_TOP_H];

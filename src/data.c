@@ -20,7 +20,7 @@ float debug_click_x;
 float debug_click_y;
 s16 debug_obj_id = -1;
 s32 debug_obj_xmin = 32000;
-u8 debug_overlay_draw_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT];
+u8 debug_overlay_draw_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
 
 u8 block_types_img_data[8192] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1534,6 +1534,7 @@ s16 DemoRecordSize[6] = {154, 192, 200, 172, 200, 120}; //95E04
 s16 DemoRecordWorld[6] = {2, 3, 4, 5, 1, 5}; //95E10
 s16 DemoRecordMap[6] = {7, 7, 1, 4, 9, 10}; //95E1C
 int screen_width = SCREEN_WIDTH_ORIGINAL; // see types.h
+int screen_height = SCREEN_HEIGHT_ORIGINAL;
 bool widescreen_enabled; // set by the platform layer (3DS display mode)
 u8* DisplayBufferNormal = NULL; //95E28 // initialized to 0xA0000 (= VGA video memory)
 u8 ModeVideoActuel = MODE_TEXT; //95E2C

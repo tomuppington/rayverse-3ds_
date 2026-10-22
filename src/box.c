@@ -85,8 +85,8 @@ void PlasmaBox(s16 x, s16 y, s16 width, s16 height, u8 a5) {
     if (y < 0) {
         height += y;
         y = 0;
-    } else if (y + height > 200) {
-        height = 200 - y;
+    } else if (y + height > SCREEN_HEIGHT) {
+        height = SCREEN_HEIGHT - y;
     }
     Plasma(x, y, width, height, word_DE74C, word_DE74A, word_DE748, word_DE746, word_DE744, word_DE742, word_DE740, word_DE73E, word_95FB0);
 }
@@ -175,8 +175,8 @@ void FireBox(s16 x, s16 y, s16 width, s16 height) {
     if (x + width > SCREEN_WIDTH) {
         width = SCREEN_WIDTH - x;
     }
-    if (y + height > 200) {
-        height = 200 - y;
+    if (y + height > SCREEN_HEIGHT) {
+        height = SCREEN_HEIGHT - y;
     }
     Fire(x, y, width, height);
 }
@@ -289,7 +289,7 @@ void gauge(s16 a1, s16 a2, s16 a3, s16 a4, s16 a5, s16 a6, s16 a7) {
 //24DCC
 void ClearBorder(s16 lim_H1, s16 lim_H2, s16 lim_W1, s16 lim_W2) {
     memset(draw_buffer, 0, lim_H1 * SCREEN_WIDTH);
-    memset(draw_buffer, 0, (200 - lim_H2) * SCREEN_WIDTH);
+    memset(draw_buffer, 0, (SCREEN_HEIGHT - lim_H2) * SCREEN_WIDTH);
     for (s32 y = lim_H1; y < lim_H2; ++y) {
         u8* row = draw_buffer + SCREEN_WIDTH * y;
         if (lim_W1 > 0) {

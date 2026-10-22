@@ -611,7 +611,7 @@ void FIRST_INIT(void) {
     JoystickPresent();
     word_E0CD0 = 3; // inlined sub_4212C()
     DrawBufferNormal = global_app_state.game.draw_buffer.memory; //(u8*)malloc(64064);
-    EffetBufferNormal = (u8*)malloc(2 * SCREEN_WIDTH_MAX * 200); // was 128000 (2 x 320x200)
+    EffetBufferNormal = (u8*)malloc(2 * SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX); // was 128000 (2 x 320x200)
     if (!DrawBufferNormal || !EffetBufferNormal) {
         fatal_error();
     }
@@ -844,7 +844,7 @@ void DEPART_LEVEL(void) {
                 text_x = 240;
                 text_y = 160;
             }
-            memset(draw_buffer, 0, SCREEN_WIDTH*200);
+            memset(draw_buffer, 0, SCREEN_WIDTH*SCREEN_HEIGHT);
             start_fade_in(2);
             display_text(language_txt[149], text_x, text_y, 2, 0); // /loading../
             synchro();

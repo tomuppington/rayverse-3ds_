@@ -58,6 +58,23 @@ static void init_def_bande(void) {
     set_def_bande(16202, 1, 2, 0, 0);
 }
 
+// How fast the background scrolls vertically (part of Init_Bande; separate so that it can be redone
+// when the picture height changes, see widescreen_level_start). 200 was the screen height.
+void calc_bande_scroll_y(s16 height) {
+    s32 screen_h = SCREEN_HEIGHT;
+    if (height <= screen_h) {
+        Val_Div_Scroll_Y = 1;
+    } else {
+        Val_Div_Scroll_Y = (16 * mp.height - screen_h) / (height - screen_h);
+    }
+    if (Val_Div_Scroll_Y != 0) {
+        ++Val_Div_Scroll_Y;
+    } else {
+        Val_Div_Scroll_Y = 2;
+    }
+    Val_Add_Scroll_Y = height - screen_h - (16 * mp.height - screen_h) / Val_Div_Scroll_Y - 1;
+}
+
 //778F0
 void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
 
@@ -66,17 +83,7 @@ void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
 
     Num_Fond = fnd;
 
-    if (height <= 200) {
-        Val_Div_Scroll_Y = 1;
-    } else {
-        Val_Div_Scroll_Y = (16 * mp.height - 200) / (height - 200);
-    }
-    if (Val_Div_Scroll_Y != 0) {
-        ++Val_Div_Scroll_Y;
-    } else {
-        Val_Div_Scroll_Y = 2;
-    }
-    Val_Add_Scroll_Y = height - 200 - (16 * mp.height - 200) / Val_Div_Scroll_Y - 1;
+    calc_bande_scroll_y(height);
 
     if (num_world == world_5_cave && num_level == 10) {
         Init_Effet_Chaleur(width, height, source_buf, dest_buf); //TODO
@@ -170,6 +177,22 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                     Copy_Plan0_To_Buf(source_buffer_pos - BufferNormalDeplt, dest_buffer_pos, stride, draw_height, w2 - w1);
                 } else {
                     Copy_Plan0_To_Buf(source_buffer_pos + (y - v34) * stride - BufferNormalDeplt, dest_buffer_pos + SCREEN_WIDTH * (y - v34), stride, draw_height - (y - v34), w2 - w1);
+                }
+            }
+        }
+        // 3DS port: a background shorter than the screen leaves rows uncovered at the top (or bottom);
+        // fill them with the nearest background row, e.g. more sky.
+        {
+            s32 first_row = MAX(y, -v68);                    // first screen row the background covers
+            s32 last_row = MIN(h2, plan_height - v68) - 1;   // last screen row it covers
+            if (first_row <= last_row) {
+                u8* first_src = draw_buffer + first_row * SCREEN_WIDTH;
+                for (s32 r = y; r < first_row; ++r) {
+                    memcpy(draw_buffer + r * SCREEN_WIDTH + w1, first_src + w1, w2 - w1);
+                }
+                u8* last_src = draw_buffer + last_row * SCREEN_WIDTH;
+                for (s32 r = last_row + 1; r < h2; ++r) {
+                    memcpy(draw_buffer + r * SCREEN_WIDTH + w1, last_src + w1, w2 - w1);
                 }
             }
         }

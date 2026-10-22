@@ -128,15 +128,15 @@ static void headless_save_anaglyph(app_state_t* app_state, const char* name) {
         fprintf(headless_log, "[frame %lld] anaglyph %s: no 3D layers this frame\n", (long long)headless_frame, name);
         return;
     }
-    static u8 left[SCREEN_WIDTH_MAX * 200], right[SCREEN_WIDTH_MAX * 200];
+    static u8 left[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX], right[SCREEN_WIDTH_MAX * SCREEN_HEIGHT_MAX];
     stereo_compose_eye(left, final_frame, -1, 1.0f);
     stereo_compose_eye(right, final_frame, +1, 1.0f);
     char path[512];
     snprintf(path, sizeof(path), "%s/%s_3d.ppm", headless_out_dir, name);
     FILE* fp = fopen(path, "wb");
     if (!fp) return;
-    fprintf(fp, "P6 %d 200 255\n", SCREEN_WIDTH);
-    for (s32 i = 0; i < SCREEN_WIDTH * 200; ++i) {
+    fprintf(fp, "P6 %d %d 255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
+    for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) {
         rgb_t l = game->draw_palette.colors[left[i]];
         rgb_t r = game->draw_palette.colors[right[i]];
         fputc(l.r, fp); fputc(r.g, fp); fputc(r.b, fp);

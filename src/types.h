@@ -1,11 +1,16 @@
 
-#define SCREEN_HEIGHT 200
-// Widescreen (added for the 3DS port): the width of the game's picture is a variable. It is 320 (the
-// original) everywhere except inside levels when the wide view is on, where it is SCREEN_WIDTH_MAX.
+// Native resolution (added for the 3DS port): the size of the game's picture is variable. It is the
+// original 320x200 everywhere except inside levels when the 3DS's "1:1 pixels" display mode is on,
+// where the game draws a 400x240 picture - the 3DS top screen's own resolution - so each game pixel is
+// one screen pixel and more of the level is visible in every direction.
 #define SCREEN_WIDTH_ORIGINAL 320
+#define SCREEN_HEIGHT_ORIGINAL 200
 #define SCREEN_WIDTH_MAX 400
+#define SCREEN_HEIGHT_MAX 240
 extern int screen_width;
+extern int screen_height;
 #define SCREEN_WIDTH screen_width
+#define SCREEN_HEIGHT screen_height
 
 #pragma pack(push,1)
 typedef struct vec2b_t {

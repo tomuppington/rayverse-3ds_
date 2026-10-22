@@ -423,9 +423,9 @@ void DISPLAY_FOND_MENU(void) {
             }
             buffer_offset += SCREEN_WIDTH;
         }
-        memset(draw_buffer, 0, (200 - Bloc_lim_H2) * SCREEN_WIDTH);
+        memset(draw_buffer, 0, (SCREEN_HEIGHT - Bloc_lim_H2) * SCREEN_WIDTH);
     } else {
-        memcpy(draw_buffer, EffetBufferNormal, SCREEN_WIDTH*200);
+        memcpy(draw_buffer, EffetBufferNormal, SCREEN_WIDTH*SCREEN_HEIGHT);
     }
 }
 
