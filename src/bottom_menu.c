@@ -337,11 +337,34 @@ bool status_panel_update(void) {
         m.flags.flip_x = 0; // (keeps the object's own scale setting, 0: drawn as is, as in the level)
         s32 x0, y0, x1, y1;
         status_frame_box(&m, anim, rest, &x0, &y0, &x1, &y1); // (placed by the resting medallion)
+        static anim_t rest_anim;
+        static anim_layer_t rest_layers[32];
         if (status_anim_frame >= 0 && status_anim_frame < rest) {
             m.anim_frame = (u8)status_anim_frame++; // (one frame of the arrival per game frame, as in the level)
         } else {
-            m.anim_frame = (u8)rest;
             status_anim_frame = -1;
+            // At rest: the resting frame with only the medallion (its two halves, sprites 1 and 17) and
+            // settled Electoons (sprite 2). In the animations the newest Electoon stays highlighted
+            // (sprite 15 or 16) until the medallion opens, and twinkles (other sprites) come and go.
+            u16 layers = anim->layers_per_frame & 0x3FFF;
+            if (layers <= COUNT(rest_layers)) {
+                memcpy(rest_layers, anim->layers + rest * layers, layers * sizeof(anim_layer_t));
+                for (s32 i = 0; i < layers; ++i) {
+                    u8 sprite = rest_layers[i].sprite_index;
+                    if (sprite == 15 || sprite == 16) {
+                        rest_layers[i].sprite_index = 2;
+                    } else if (sprite != 1 && sprite != 17 && sprite != 2) {
+                        rest_layers[i].sprite_index = 0; // (not drawn)
+                    }
+                }
+                rest_anim = *anim;
+                rest_anim.layers = rest_layers;
+                m.animations = &rest_anim;
+                m.anim_index = 0;
+                m.anim_frame = 0;
+            } else {
+                m.anim_frame = (u8)rest;
+            }
         }
         m.screen_x = 92 - (x0 + x1) / 2; // centred on (92, 124)
         m.screen_y = 124 - (y0 + y1) / 2;
