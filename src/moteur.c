@@ -317,7 +317,7 @@ bool in_action_zone(s16 screen_x, s16 screen_y, obj_t* obj, u8 active) {
             zdiff_y += 60;
         }
         in_zone = 1;
-        if (((s16) screen_x < -284 - zdiff_x) || ((s16) screen_x > zdiff_x + 444) ||
+        if (((s16) screen_x < -284 - zdiff_x) || ((s16) screen_x > zdiff_x + 444 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL)) ||
                 ((s16) screen_y < -144 - zdiff_y) || ((s16) screen_y > zdiff_y + 304) ||
                 (obj->y + obj->offset_by < -30) || (obj->y > mp.height * 16 + 30) ||
                 (obj->x + offset_bx * 2 < 0) || (obj->x > mp.width * 16)
@@ -1863,8 +1863,10 @@ void recale_ray_pos(void) {
     }
 
     if (scroll_x == -1) {
-        s16 unk_x_1 = (112 - ray.offset_bx) - special_ray_mov_win_x_left;
-        s16 unk_x_2 = special_ray_mov_win_x_right - (ray.offset_bx - 208);
+        // Widescreen: keep Rayman's camera window centred on the wider screen.
+        s16 wide_extra = (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2;
+        s16 unk_x_1 = (112 + wide_extra - ray.offset_bx) - special_ray_mov_win_x_left;
+        s16 unk_x_2 = special_ray_mov_win_x_right - (ray.offset_bx - 208 - wide_extra);
         if (decalage_en_cours > 0 || ray.speed_x > 0) {
             s16 unk_x_3 = ashr16(ray.screen_x - unk_x_1, 2);
             if (unk_x_3 >= dhspeed) {
@@ -2200,7 +2202,7 @@ void INIT_RAY(u8 new_lvl) {
                 ray.flags.alive = false;
                 ray.is_active = 0;
             }
-            xmap = obj->x + obj->offset_bx - 160;
+            xmap = obj->x + obj->offset_bx - SCREEN_WIDTH / 2;
             ymap = obj->y - 10;
             if (GameModeVideo != MODE_NORMAL) {
                 if (xmap >= xmapmax) {
@@ -2722,7 +2724,7 @@ void DO_MOTEUR(void) {
     ymap_old = ymap;
 
     if (ModeVideoActuel == MODE_X) {
-        RIGHT_MAP_BORDER = xmap + 320 - ray.offset_bx - 36;
+        RIGHT_MAP_BORDER = xmap + SCREEN_WIDTH - ray.offset_bx - 36;
         LEFT_MAP_BORDER = xmap + 20 - ray.offset_bx;
     } else {
         RIGHT_MAP_BORDER = Bloc_lim_W2 + xmap - ray.offset_bx - 36;

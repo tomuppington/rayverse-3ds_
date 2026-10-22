@@ -31,7 +31,7 @@ void InitPlasma(u8 need_set_palette) {
 
 //24068
 void Plasma(s16 x, s16 y, s16 width, s16 height, u8 a5, u8 a6, u8 a7, u8 a8, u8 a9, u8 a10, u8 a11, u8 a12, u8 a13) {
-    u8* row = draw_buffer + 320 * y + x;
+    u8* row = draw_buffer + SCREEN_WIDTH * y + x;
     u32 v17 = a6 | (a8 << 8) | (a10 << 16) | (a12 << 24);
     for (s32 j = 0; j < height; ++j) {
         v17 = (v17 + 0x01010101) & 0x7F7F7F7F;
@@ -47,7 +47,7 @@ void Plasma(s16 x, s16 y, s16 width, s16 height, u8 a5, u8 a6, u8 a7, u8 a8, u8 
             v22 += plasma_palette_color_index;
             *pos++ = v22;
         }
-        row += 320;
+        row += SCREEN_WIDTH;
     }
 }
 
@@ -79,8 +79,8 @@ void PlasmaBox(s16 x, s16 y, s16 width, s16 height, u8 a5) {
     if (x < 0) {
         width += x;
         x = 0;
-    } else if (x + width > 320) {
-        width = 320 - x;
+    } else if (x + width > SCREEN_WIDTH) {
+        width = SCREEN_WIDTH - x;
     }
     if (y < 0) {
         height += y;
@@ -110,7 +110,7 @@ void InitFire(void) {
 
 //244C4
 void Fire(s16 x, s16 y, s16 width, s16 height) {
-    u8* row = draw_buffer + 320 * y + x;
+    u8* row = draw_buffer + SCREEN_WIDTH * y + x;
     MakeMyRand(0);
     u8 c = plasma_palette_color_index;
     for (s32 i = 0; i < width; ++i) {
@@ -153,7 +153,7 @@ void Fire(s16 x, s16 y, s16 width, s16 height) {
         for (s32 i = 0; i < width; ++i) {
             *pos++ = p1[300 * j + i];
         }
-        row += 320;
+        row += SCREEN_WIDTH;
     }
 
 }
@@ -172,8 +172,8 @@ void FireBox(s16 x, s16 y, s16 width, s16 height) {
         height += y;
         y = 0;
     }
-    if (x + width > 320) {
-        width = 320 - x;
+    if (x + width > SCREEN_WIDTH) {
+        width = SCREEN_WIDTH - x;
     }
     if (y + height > 200) {
         height = 200 - y;
@@ -288,15 +288,15 @@ void gauge(s16 a1, s16 a2, s16 a3, s16 a4, s16 a5, s16 a6, s16 a7) {
 
 //24DCC
 void ClearBorder(s16 lim_H1, s16 lim_H2, s16 lim_W1, s16 lim_W2) {
-    memset(draw_buffer, 0, lim_H1 * 320);
-    memset(draw_buffer, 0, (200 - lim_H2) * 320);
+    memset(draw_buffer, 0, lim_H1 * SCREEN_WIDTH);
+    memset(draw_buffer, 0, (200 - lim_H2) * SCREEN_WIDTH);
     for (s32 y = lim_H1; y < lim_H2; ++y) {
-        u8* row = draw_buffer + 320 * y;
+        u8* row = draw_buffer + SCREEN_WIDTH * y;
         if (lim_W1 > 0) {
             memset(row, 0, lim_W1);
         }
-        if (lim_W2 < 320) {
-            memset(row + lim_W2, 0, 320 - lim_W2);
+        if (lim_W2 < SCREEN_WIDTH) {
+            memset(row + lim_W2, 0, SCREEN_WIDTH - lim_W2);
         }
     }
 }

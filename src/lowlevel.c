@@ -83,12 +83,12 @@ void DrawBlackBoxNormal(u8* buffer /*edi*/, s32 x /*edx*/, s32 y /*ecx*/, s32 he
     if (y + height > 200) {
         height = 200 - y;
     }
-    if (x + width > 320) {
-        width = 320 - x;
+    if (x + width > SCREEN_WIDTH) {
+        width = SCREEN_WIDTH - x;
     }
     if (width > 0 && height > 0) {
-        for (s32 current_y = y; current_y < y + height && height < 320; ++current_y) {
-            memset(buffer + 320 * current_y + x, 0, width);
+        for (s32 current_y = y; current_y < y + height && height < SCREEN_WIDTH; ++current_y) {
+            memset(buffer + SCREEN_WIDTH * current_y + x, 0, width);
         }
     }
 }
@@ -386,10 +386,10 @@ s32 get_sprite_clipping_ymax(void) {
 //161FA
 void sprite_clipping(s32 xmin, s32 xmax, s32 ymin, s32 ymax) {
     if (xmin < 0) xmin = 0;
-    if (xmin > 320) xmin = 320;
+    if (xmin > SCREEN_WIDTH) xmin = SCREEN_WIDTH;
     XMIN = xmin;
     if (xmax < 0) xmax = 0;
-    if (xmax > 320) xmax = 320;
+    if (xmax > SCREEN_WIDTH) xmax = SCREEN_WIDTH;
     XMAX = xmax;
     if (ymin < 0) ymin = 0;
     if (ymin > 200) ymin = 200;
@@ -526,8 +526,8 @@ void DrawSpriteColorFlipX(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
 
 //16A18
 void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
-    u8* draw_pos = draw_buf + y * 320 + x;
-    u8* draw_end = draw_pos + size.y * 320;
+    u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+    u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
     s32 sprite_width = size.x;
     u8* sprite_pos = image_data;
     while (draw_pos < draw_end) {
@@ -540,15 +540,15 @@ void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf,
             }
         }
         sprite_pos += sprite_width;
-        draw_pos += 320;
+        draw_pos += SCREEN_WIDTH;
     }
 }
 
 //16A24
 void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         while (draw_pos < draw_end) {
@@ -561,7 +561,7 @@ void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* i
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }
@@ -569,8 +569,8 @@ void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* i
 //16A9D
 void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_t size /*ecx*/, u8* draw_buf /*edi*/, u8* image_data /*esi*/) {
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         while (draw_pos < draw_end) {
@@ -581,15 +581,15 @@ void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }
 
 //16AFC
 void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
-    u8* draw_pos = draw_buf + y * 320 + x;
-    u8* draw_end = draw_pos + size.y * 320;
+    u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+    u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
     s32 sprite_width = size.x;
     u8* sprite_pos = image_data;
     while (draw_pos < draw_end) {
@@ -602,15 +602,15 @@ void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_
             }
         }
         sprite_pos += sprite_width;
-        draw_pos += 320;
+        draw_pos += SCREEN_WIDTH;
     }
 }
 
 //16B08
 void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         while (draw_pos < draw_end) {
@@ -623,7 +623,7 @@ void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }
@@ -631,8 +631,8 @@ void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
 //16B88
 void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_t size /*ecx*/, u8* draw_buf /*edi*/, u8* image_data /*esi*/) {
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         while (draw_pos < draw_end) {
@@ -643,7 +643,7 @@ void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, ve
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }
@@ -652,8 +652,8 @@ void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, ve
 void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_t size /*ecx*/, u8* draw_buf /*edi*/, u8* image_data /*esi*/) {
     saved_sprite_color = color * 8;
     if (clip_sprite_on_screen(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         u8 current_color = saved_sprite_color;
@@ -667,7 +667,7 @@ void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }
@@ -676,8 +676,8 @@ void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2
 void DrawSpriteColorFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* image_data) {
     saved_sprite_color = color * 8;
     if (clip_sprite_on_screen_flipped(&x, &y, &size, &image_data) && size.x > 0) {
-        u8* draw_pos = draw_buf + y * 320 + x;
-        u8* draw_end = draw_pos + size.y * 320;
+        u8* draw_pos = draw_buf + y * SCREEN_WIDTH + x;
+        u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
         u8 current_color = saved_sprite_color;
@@ -691,7 +691,7 @@ void DrawSpriteColorFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_b
                 }
             }
             sprite_pos += sprite_width;
-            draw_pos += 320;
+            draw_pos += SCREEN_WIDTH;
         }
     }
 }

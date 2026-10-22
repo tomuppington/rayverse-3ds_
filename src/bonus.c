@@ -85,9 +85,9 @@ s16 do_perfect_bonus(u32 a1) {
             cyclage_palette(0, 192, 239);
         }
         DISPLAY_FOND3();
-        display_text(language_txt[157], 160, 60, 0, 5);  // /great/
-        display_text(language_txt[158], 160, 110, 2, 1); // /your time:/
-        display_text(bonus_time_display_text, 160, 150, 0, 5);
+        display_text(language_txt[157], SCREEN_WIDTH / 2, 60, 0, 5);  // /great/
+        display_text(language_txt[158], SCREEN_WIDTH / 2, 110, 2, 1); // /your time:/
+        display_text(bonus_time_display_text, SCREEN_WIDTH / 2, 150, 0, 5);
     } else {
         if (nb_fade == 0 && horloge[4] == 0) {
             cyclage_palette(0, 128, 191);

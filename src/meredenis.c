@@ -68,7 +68,7 @@ void setMereDenisAtScrollBorder(obj_t* obj, u8 flip_x) {
             obj->x = scroll_end_x + 304 - obj->offset_bx;
         } else {
             
-            s16 center = (scroll_start_x + scroll_end_x + 320) / 2;
+            s16 center = (scroll_start_x + scroll_end_x + SCREEN_WIDTH) / 2;
             s16 obj_center = obj->x + obj->offset_bx;
             
             if (obj_center - center <= 0) {

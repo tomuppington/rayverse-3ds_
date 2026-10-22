@@ -293,5 +293,6 @@ int main(int argc, char** argv) {
         game_init(&app_state->game);
     }
     app_state->running = true;
+    widescreen_enabled = getenv("WIDESCREEN") != NULL; // test the wide view (3DS display option)
     return main_Ray(argc, argv);
 }

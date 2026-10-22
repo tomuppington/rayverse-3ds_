@@ -324,6 +324,7 @@ s16 WORLD_CHOICE(u32 a1) {
 
 //3514C
 void DO_WORLD_MAP(void) {
+    widescreen_level_end(); // 3DS port: the world map uses the original 320-pixel picture
     //clear_text_input_buffer();
     SetCompteurTrameAudio();
     EFFACE_VIDEO();
@@ -610,7 +611,7 @@ void FIRST_INIT(void) {
     JoystickPresent();
     word_E0CD0 = 3; // inlined sub_4212C()
     DrawBufferNormal = global_app_state.game.draw_buffer.memory; //(u8*)malloc(64064);
-    EffetBufferNormal = (u8*)malloc(128000);
+    EffetBufferNormal = (u8*)malloc(2 * SCREEN_WIDTH_MAX * 200); // was 128000 (2 x 320x200)
     if (!DrawBufferNormal || !EffetBufferNormal) {
         fatal_error();
     }
@@ -843,7 +844,7 @@ void DEPART_LEVEL(void) {
                 text_x = 240;
                 text_y = 160;
             }
-            memset(draw_buffer, 0, 320*200);
+            memset(draw_buffer, 0, SCREEN_WIDTH*200);
             start_fade_in(2);
             display_text(language_txt[149], text_x, text_y, 2, 0); // /loading../
             synchro();
@@ -866,6 +867,7 @@ void DEPART_LEVEL(void) {
         LOAD_VIGNET_GAME(main_mem_level);
         load_level(main_mem_level, num_world, level_filename);
         INIT_FND();
+        widescreen_level_start(); // 3DS port
 
     }
 }

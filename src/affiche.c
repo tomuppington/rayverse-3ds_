@@ -331,7 +331,8 @@ void DISPLAY_FIXE(s32 time) {
             if (time == -2) {
                 s32 draw_y = (GameModeVideo == MODE_NORMAL && P486 == 1) ? 16 : 0;
                 display_sprite_NoClip(obj, 27, 16, draw_y + 5, 1);
-                display_sprite_NoClip(obj, 56, 244, draw_y + 5, 1);
+                s16 hud_right = SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL; // widescreen: keep the tings counter in the top-right corner
+                display_sprite_NoClip(obj, 56, 244 + hud_right, draw_y + 5, 1);
                 display_sprite_NoClip(obj, 28 + status_bar.lives_digits[0], 55, draw_y + 5, 1);
                 display_sprite_NoClip(obj, 28 + status_bar.lives_digits[1], 70, draw_y + 5, 1);
                 if (ray.hit_points != (u8)-1 && !fin_du_jeu) {
@@ -340,8 +341,8 @@ void DISPLAY_FIXE(s32 time) {
                         display_sprite_NoClip(obj, 20 + status_bar.hp_sprites[0], 59, draw_y + 27, 1);
                     }
                 }
-                display_sprite_NoClip(obj, 28 + status_bar.wiz_digits[0], 276, draw_y + 5, 1);
-                display_sprite_NoClip(obj, 28 + status_bar.wiz_digits[1], 290, draw_y + 5, 1);
+                display_sprite_NoClip(obj, 28 + status_bar.wiz_digits[0], 276 + hud_right, draw_y + 5, 1);
+                display_sprite_NoClip(obj, 28 + status_bar.wiz_digits[1], 290 + hud_right, draw_y + 5, 1);
             } else {
                 display_sprite_NoClip(obj, 56, Bloc_lim_W1 + 14, Bloc_lim_H2 - 32, 1);
                 display_sprite_NoClip(obj, 28 + status_bar.wiz_digits[0], Bloc_lim_W1 + 46, Bloc_lim_H2 - 32, 1);
@@ -581,11 +582,11 @@ void DISPLAY_BLACKBOX(s16 x, s16 y, s16 width, s16 height, s16 font_size, u8 is_
     if (x < 0) {
         clip_x = 0;
         clip_width = x + width;
-    } else if (x > 320) {
-        clip_x = 320;
+    } else if (x > SCREEN_WIDTH) {
+        clip_x = SCREEN_WIDTH;
     }
-    if (clip_width + clip_x > 320) {
-        clip_width = 320 - clip_x;
+    if (clip_width + clip_x > SCREEN_WIDTH) {
+        clip_width = SCREEN_WIDTH - clip_x;
     }
     if (y < 0) {
         clip_y = 0;

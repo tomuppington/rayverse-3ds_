@@ -59,17 +59,17 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
         DO_SWAP_PALETTE();
         if (fixon || fixontemp) {
             if (Mode_Pad == 1 && Main_Control) {
-                Swap_And_Test_Joystick(DrawBufferNormal, DisplayBufferNormal, 320, Bloc_lim_H2);
+                Swap_And_Test_Joystick(DrawBufferNormal, DisplayBufferNormal, SCREEN_WIDTH, Bloc_lim_H2);
             } else {
-                Swap_To_Screen(DrawBufferNormal, DisplayBufferNormal, 320, Bloc_lim_H2); //TODO
+                Swap_To_Screen(DrawBufferNormal, DisplayBufferNormal, SCREEN_WIDTH, Bloc_lim_H2); //TODO
             }
         } else {
             // stub
             // TODO: work out what is happening here
             if (Mode_Pad == 1 && Main_Control) {
-                Swap_And_Test_Joystick(DrawBufferNormal, DisplayBufferNormal, 320, Bloc_lim_H2);
+                Swap_And_Test_Joystick(DrawBufferNormal, DisplayBufferNormal, SCREEN_WIDTH, Bloc_lim_H2);
             } else {
-                Swap_To_Screen(DrawBufferNormal, DisplayBufferNormal, 320, Bloc_lim_H2); //TODO
+                Swap_To_Screen(DrawBufferNormal, DisplayBufferNormal, SCREEN_WIDTH, Bloc_lim_H2); //TODO
             }
         }
 
@@ -95,7 +95,7 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
             Calcul_Deplacement_Bande(xmap, plan0_width, plan0_height);
             Display_Back_Screen(plan0_width, plan0_height, Bloc_lim_W1, Bloc_lim_H1, Bloc_lim_W2, Bloc_lim_H2);
         } else {
-            memset(draw_buffer, 0, 320*200);
+            memset(draw_buffer, 0, SCREEN_WIDTH*200);
         }
 
         if (MapAvecPluieOuNeige) {
@@ -306,7 +306,7 @@ void PcMain(void) {
     while (!fin_de_rayman) {
         DEPART_INIT_LOOP();
         INIT_WORLD_INFO();
-        set_default_Bloc_clipping();
+        widescreen_level_end(); // 3DS port (also sets the default clipping)
         DO_NEW_MENUS();
 
         if (!fin_de_rayman && !ModeDemo && Frequence == 70) {

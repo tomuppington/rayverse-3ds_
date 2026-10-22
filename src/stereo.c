@@ -16,7 +16,7 @@
 // behind it is treated as background. Its colour is then taken from a few pixels to the side, which
 // is usually the same or very similar, so this is rarely visible.
 
-#define STEREO_W 320
+#define STEREO_W SCREEN_WIDTH // the picture width (320, or wider in the wide view)
 #define STEREO_H 200
 
 // Depth of each layer at full 3D slider, in game pixels per eye (positive = behind the screen,
@@ -33,8 +33,8 @@ static const stereo_depths_t stereo_depths_map   = { 3.0f,  0.0f, -2.0f };
 
 enum { STEREO_SCENE_LEVEL, STEREO_SCENE_MAP };
 
-static u8 stereo_layer_back[STEREO_W * STEREO_H];
-static u8 stereo_layer_main[STEREO_W * STEREO_H];
+static u8 stereo_layer_back[SCREEN_WIDTH_MAX * STEREO_H];
+static u8 stereo_layer_main[SCREEN_WIDTH_MAX * STEREO_H];
 static bool stereo_have_back;
 static bool stereo_have_main;
 static s32 stereo_scene;

@@ -38,13 +38,18 @@ void game_init_sound(game_sound_buffer_t* sound, s32 samples_per_second) {
 
 void game_init(game_state_t* game) {
 	CarteSonAutorisee = 1;
-	game->draw_buffer = create_palettized_image(320, 200);
-	game->prev_frame = create_palettized_image(320, 200);
+	// Allocated for the widest picture (see SCREEN_WIDTH in types.h); the width is set every frame.
+	game->draw_buffer = create_palettized_image(SCREEN_WIDTH_MAX, 200);
+	game->prev_frame = create_palettized_image(SCREEN_WIDTH_MAX, 200);
+	game->draw_buffer.width = SCREEN_WIDTH;
+	game->prev_frame.width = SCREEN_WIDTH;
 	game->initialized = true;
 	global_game = game;
 }
 
 void advance_frame(void) {
+	global_app_state.game.draw_buffer.width = SCREEN_WIDTH; // widescreen: the picture width can change between levels
+	global_app_state.game.prev_frame.width = SCREEN_WIDTH;
 	// Since we don't have a display buffer we have a separate buffer for the debug boxes/lines which we overlay
 	if (debug_show_obj_collision || debug_show_mini_map) {
 		for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
@@ -63,6 +68,11 @@ void advance_frame(void) {
     // draw buffer and palette, saving two passes over the whole picture every frame.
     ctr_advance_frame(app_state);
     return;
+#endif
+#ifdef RAYVERSE_HEADLESS
+	if (app_state->active_surface->width != SCREEN_WIDTH) {
+		surface_resize(app_state->active_surface, SCREEN_WIDTH, 200); // widescreen test pictures
+	}
 #endif
 	rgb_t clear_color = { 0, 0, 0 };
 	render_clear(app_state->active_surface, clear_color);

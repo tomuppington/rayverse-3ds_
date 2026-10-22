@@ -20,7 +20,7 @@ float debug_click_x;
 float debug_click_y;
 s16 debug_obj_id = -1;
 s32 debug_obj_xmin = 32000;
-u8 debug_overlay_draw_buffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+u8 debug_overlay_draw_buffer[SCREEN_WIDTH_MAX * SCREEN_HEIGHT];
 
 u8 block_types_img_data[8192] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1533,6 +1533,8 @@ u8 DemoRecord[1500] = {
 s16 DemoRecordSize[6] = {154, 192, 200, 172, 200, 120}; //95E04
 s16 DemoRecordWorld[6] = {2, 3, 4, 5, 1, 5}; //95E10
 s16 DemoRecordMap[6] = {7, 7, 1, 4, 9, 10}; //95E1C
+int screen_width = SCREEN_WIDTH_ORIGINAL; // see types.h
+bool widescreen_enabled; // set by the platform layer (3DS display mode)
 u8* DisplayBufferNormal = NULL; //95E28 // initialized to 0xA0000 (= VGA video memory)
 u8 ModeVideoActuel = MODE_TEXT; //95E2C
 u8 GameModeVideo = MODE_TEXT; //95E2D
@@ -2785,6 +2787,7 @@ s16 ktxtenx; //CF7D8
 s16 ktxteny; //CF7DA
 s16 rotationtxt; //CF7DC
 s16 plan0_width; //CF7DE
+s32 plan0_stride; // added (widescreen): bytes per row of the background buffer, which holds 3 copies of the picture
 s16 yp0; //CF7E0
 s16 plan2_height; //CF7E2
 s16 plan0_height; //CF7E4

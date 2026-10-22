@@ -821,13 +821,16 @@ void LoadPlan0InVignet(s32 resource_id) {
         } else {
             // We need to blit the image data into PLAN0 which has been allocated to be twice as wide.
             // (Maybe for the differential scrolling? Need to check later.)
+            // Widescreen (3DS port): three copies side by side instead of two, so that a scrolled background
+            // still covers a screen wider than 320 pixels.
             u8* source_row = image.memory;
             u8* dest_row = dest_buffer;
             for (s32 y = 0; y < height; ++y) {
                 memcpy(dest_row, source_row, width);
                 memcpy(dest_row + width, source_row, width); // draw the image twice next to each other
+                memcpy(dest_row + 2 * width, source_row, width);
                 source_row += width;
-                dest_row += 2 * width;
+                dest_row += 3 * width;
             }
         }
         free(image.memory);
@@ -845,6 +848,7 @@ void LoadPlan0InVignet(s32 resource_id) {
             PLAN0 = PLAN0BIT;
 
             plan0_width = 2 * width;
+            plan0_stride = 3 * width;
             plan0_height = height;
         }
     }
@@ -861,7 +865,7 @@ u8* allocate_PLAN0(mem_t* mem_world, s32 width, s32 height) {
         // NOTE: In Normal mode, only one of these buffers is used.
         // Actually, one of the buffers is leaked in Normal mode, because in LoadPlan0InVignet we're setting PLAN0 = PLAN0BIT
         // (I think that is a bug in the game.)
-        buffer1 = block_malloc(mem_world, width * height);
+        buffer1 = block_malloc(mem_world, width * height * 3 / 2); // widescreen: room for 3 copies (width is 2 copies)
         buffer2 = block_malloc(mem_world, 2 * width * height + 8 * width);
     }
     PLAN0BIT = buffer2;

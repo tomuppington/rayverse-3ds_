@@ -2507,7 +2507,7 @@ void DO_RAY_ON_MS(void) {
     ray.ray_dist = ((s16) (ray.offset_bx + ray.x) >> 4) + ((s16) (ray.offset_by + ray.y) >> 4) * mp.width;
     if ((ray.screen_x + ray.offset_bx + 30) < 0 ||
             (ray.screen_y + ray.offset_by + 20) < 0 ||
-            ray.screen_x > 290 || ray.screen_y > 200
+            ray.screen_x > 290 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) || ray.screen_y > 200
     ) {
         ray.hit_points = 0;
         RAY_HURT();
@@ -2557,7 +2557,7 @@ void DO_RAY_ON_MS(void) {
             RAY_RESPOND_TO_NOTHING();
         if (ray.screen_x < -20 && ray.speed_x < 0)
             ray.speed_x = 0;
-        if (ray.screen_x > 210 && ray.speed_x > 0)
+        if (ray.screen_x > 210 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) && ray.speed_x > 0)
             ray.speed_x = 0;
         if (ray.screen_y < 3 && ray.speed_y < 0)
             ray.speed_y = 0;

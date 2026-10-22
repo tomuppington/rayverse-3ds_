@@ -87,15 +87,35 @@ void set_default_Bloc_clipping(void) {
 #else
     Bloc_lim_W1 = 4;
 #endif
-    Bloc_lim_W2 = 320;
+    Bloc_lim_W2 = SCREEN_WIDTH;
 }
 
+
+// Widescreen (3DS port): called once a level has been loaded. Uses the wider picture if it is enabled
+// and the level is wide enough; otherwise the original 320 pixels.
+void widescreen_level_start(void) {
+    s32 w = SCREEN_WIDTH_ORIGINAL;
+    // Betilla's levels (cutscenes) keep the original picture: their text is laid out for it.
+    bool fairy_level = (num_world == 1 && (num_level == 3 || num_level == 8 || num_level == 17)) ||
+                       (num_world == 2 && num_level == 11) || (num_world == 3 && num_level == 11);
+    if (widescreen_enabled && GameModeVideo == MODE_NORMAL && 16 * mp.width >= SCREEN_WIDTH_MAX && !fairy_level) {
+        w = SCREEN_WIDTH_MAX;
+    }
+    screen_width = w;
+    set_default_Bloc_clipping();
+}
+
+// Back to the original 320 pixels (world map, menus).
+void widescreen_level_end(void) {
+    screen_width = SCREEN_WIDTH_ORIGINAL;
+    set_default_Bloc_clipping();
+}
 
 //5CA24
 void set_xymapini(void) {
     xmapmax = 16 * mp.width - Bloc_lim_W2;
     ymapmax = 16 * mp.height - Bloc_lim_H2;
-    xmapmaxini = 16 * mp.width - 320;
+    xmapmaxini = 16 * mp.width - SCREEN_WIDTH;
     ymapmaxini = 16 * mp.height - 200;
     if (xmapmax < 0) {
         xmapmax = 0;
@@ -161,8 +181,8 @@ void set_xywhmap(s16 xmin, s16 xmax, s16 ymin, s16 ymax) {
     if (ymin < 0) {
         Bloc_lim_H1 = 0;
     }
-    if (xmax > 320) {
-        Bloc_lim_W2 = 320;
+    if (xmax > SCREEN_WIDTH) {
+        Bloc_lim_W2 = SCREEN_WIDTH;
     }
     if (xmin < 0) {
         Bloc_lim_W1 = 0;
@@ -256,7 +276,7 @@ void MaskScrollDiffSprites(mem_t* buffer) {
 void DRAW_MAP(u8* draw_buf, big_map_t* big_map) {
     display_map_t* display_map = big_map->display_map;
     if (display_map->height_in_tiles > 1 && display_map->width_in_tiles > 1) {
-        u8* draw_pos = draw_buf + 320 * display_map->y + display_map->x;
+        u8* draw_pos = draw_buf + SCREEN_WIDTH * display_map->y + display_map->x;
         for (s32 tile_y = 0; tile_y < display_map->height_in_tiles; ++tile_y) {
             for (s32 tile_x = 0; tile_x < display_map->width_in_tiles; ++tile_x) {
                 s32 tile_index = display_map->tile_index + tile_y * big_map->width + tile_x;

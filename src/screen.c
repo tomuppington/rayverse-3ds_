@@ -98,8 +98,8 @@ void Init_Bande(u8 fnd, s16 width, s16 height, u8* source_buf, u8* dest_buf) {
         bande->offset = cumulative_length;
         u8 type_scroll = Type_Scroll[10 * (num_world - 1) + Num_Fond];
         if (type_scroll == 0 || type_scroll == 2) {
-            bande->source_buffer_pos = source_buf + cumulative_length * width;
-            bande->draw_buffer_pos = dest_buf + cumulative_length * 320;
+            bande->source_buffer_pos = source_buf + cumulative_length * plan0_stride;
+            bande->draw_buffer_pos = dest_buf; // widescreen: the row offset is added when drawing (screen width can vary)
         } else {
             bande->source_buffer_pos = source_buf + cumulative_length;
             bande->draw_buffer_pos = dest_buf + cumulative_length;
@@ -148,17 +148,18 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
         if (v68 > SCREEN_HEIGHT - h2 + (plan_height - SCREEN_HEIGHT)) {
             v68 = plan_height - h2;
         }
+        s32 stride = plan0_stride; // widescreen: the background buffer holds 3 copies of the picture per row
         for (s32 i = 0; i < NbBande; ++i) {
             bande_t* bande = Bande + i;
             u8* source_buffer_pos = bande->source_buffer_pos + bande->field_6 + w1;
-            u8* dest_buffer_pos = bande->draw_buffer_pos - SCREEN_WIDTH * v68 + w1;
+            u8* dest_buffer_pos = bande->draw_buffer_pos + SCREEN_WIDTH * bande->offset - SCREEN_WIDTH * v68 + w1;
             s32 draw_height = bande->length;
             s32 v34 = bande->offset - v68;
             s32 v36 = bande->length + v34;
             if (v34 < 0 && v36 > 0 && bande->length != 0) {
                 draw_height = v36;
                 dest_buffer_pos -= SCREEN_WIDTH * v34;
-                source_buffer_pos -= plan_width * v34;
+                source_buffer_pos -= stride * v34;
                 v34 = 0;
             }
             if (y < v36 && v34 < h2) {
@@ -166,9 +167,9 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
                     if (h2 < v36) {
                         draw_height = h2 - v34;
                     }
-                    Copy_Plan0_To_Buf(source_buffer_pos - BufferNormalDeplt, dest_buffer_pos, plan_width, draw_height, w2 - w1);
+                    Copy_Plan0_To_Buf(source_buffer_pos - BufferNormalDeplt, dest_buffer_pos, stride, draw_height, w2 - w1);
                 } else {
-                    Copy_Plan0_To_Buf(source_buffer_pos + (y - v34) * plan_width - BufferNormalDeplt, dest_buffer_pos + SCREEN_WIDTH * (y - v34), plan_width, draw_height - (y - v34), w2 - w1);
+                    Copy_Plan0_To_Buf(source_buffer_pos + (y - v34) * stride - BufferNormalDeplt, dest_buffer_pos + SCREEN_WIDTH * (y - v34), stride, draw_height - (y - v34), w2 - w1);
                 }
             }
         }
@@ -199,6 +200,8 @@ void Display_Back_Screen(s16 plan_width, s16 plan_height, s16 w1, s16 h1, s16 w2
 
     } else {
         // type_scroll == 1
+        s32 stride = plan0_stride;
+        plan_width = (s16)stride; // (only used as the row length of the background buffer below)
         for (s32 i = 0; i < NbBande; ++i) {
             bande_t* bande = Bande + i;
             s16 v24_4 = plan_height - bande->field_6 - h1;

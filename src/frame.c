@@ -405,7 +405,7 @@ void DISPLAY_FOND3(void) {
 
 //3CE20
 void DISPLAY_FOND_MENU(void) {
-    s32 v1 = 320 - Bloc_lim_W2 + Bloc_lim_W1;
+    s32 v1 = SCREEN_WIDTH - Bloc_lim_W2 + Bloc_lim_W1;
     if (OptionGame) {
         if (prev_Bloc_lim_W1 != Bloc_lim_W1) {
             if (prev_Bloc_lim_W1 < Bloc_lim_W1) {
@@ -413,19 +413,19 @@ void DISPLAY_FOND_MENU(void) {
             }
             Bloc_lim_W1 = prev_Bloc_lim_W1;
         }
-        memset(draw_buffer, 0, Bloc_lim_H1 * 320);
-        s32 buffer_offset = Bloc_lim_H1 * 320 + Bloc_lim_W1;
+        memset(draw_buffer, 0, Bloc_lim_H1 * SCREEN_WIDTH);
+        s32 buffer_offset = Bloc_lim_H1 * SCREEN_WIDTH + Bloc_lim_W1;
         for (s32 y = Bloc_lim_H1; y < Bloc_lim_H2; ++y) {
             u8* dest_pos = draw_buffer + buffer_offset;
             u8* source_pos = EffetBufferNormal + buffer_offset;
             for (s32 x = Bloc_lim_W1; x < Bloc_lim_W2; ++x) {
                 *dest_pos++ = *source_pos++;
             }
-            buffer_offset += 320;
+            buffer_offset += SCREEN_WIDTH;
         }
-        memset(draw_buffer, 0, (200 - Bloc_lim_H2) * 320);
+        memset(draw_buffer, 0, (200 - Bloc_lim_H2) * SCREEN_WIDTH);
     } else {
-        memcpy(draw_buffer, EffetBufferNormal, 320*200);
+        memcpy(draw_buffer, EffetBufferNormal, SCREEN_WIDTH*200);
     }
 }
 

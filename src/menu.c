@@ -210,10 +210,10 @@ void InitClipping(void) {
     if (GameModeVideo != MODE_NORMAL) {
         default_sprite_clipping();
     } else if (is_fee || (num_world == world_6_cake && num_level == 4) || get_casse_brique_active()) {
-        set_xywhmap(TabW1[0], TabW2[0], TabH1[0], TabH2[0]);
+        set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], TabH2[0]);
         sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
     } else {
-        set_xywhmap(TabW1[SizeScreen], TabW2[SizeScreen], TabH1[SizeScreen], TabH2[SizeScreen]);
+        set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], TabH2[SizeScreen]);
         sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
         N_CLRSCR(DrawBufferNormal);
     }
@@ -337,7 +337,7 @@ void DO_OPTIONS_IN_GAME(void) {
     MENU_RETURN = 0;
     if (GoMenu == 1) {
         if (byte_96884 == 64) {
-            set_xywhmap(TabW1[0], TabW2[0], TabH1[0], TabH2[0]);
+            set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], TabH2[0]);
             sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             ++GoMenu;
         } else {
@@ -398,7 +398,7 @@ void DO_OPTIONS_IN_GAME(void) {
             OptionGame = 0;
             new_key();
             if (GameModeVideo == MODE_NORMAL) {
-                set_xywhmap(TabW1[SizeScreen], TabW2[SizeScreen], TabH1[SizeScreen], TabH2[SizeScreen]);
+                set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], TabH2[SizeScreen]);
                 sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
                 N_CLRSCR(DrawBufferNormal);
             } else {
@@ -432,7 +432,7 @@ void INIT_GENERAL_CHOICE(void) {
     u8 max_options = 0;
     option_exit = 3;
     nbre_options = 4;
-    basex = 160;
+    basex = SCREEN_WIDTH / 2;
     for (s32 i = 0; i < nbre_options; ++i) {
         display_item_t* display_item = menu_to_display + i;
         strncpy(display_item->text, language_txt[190], 200); // "music"
@@ -598,7 +598,7 @@ void INIT_OPTIONS_CHOICE(void) {
     } else {
         byte_E4CFC = 75;
     }
-    basex = 160 - byte_E4CFC;
+    basex = SCREEN_WIDTH / 2 - byte_E4CFC;
     if (OptionGame) {
         position = 6;
         option_exit = 6;
@@ -1341,7 +1341,7 @@ void DO_YESNOBIS(void) {
 //4FB94
 u8 confirmation_msg(u8 which_message) {
     display_item_t* to_display = &msg_to_display[1];
-    to_display->xpos = 160;
+    to_display->xpos = SCREEN_WIDTH / 2;
     to_display->ypos = 100;
     to_display->font_size = 2;
     to_display->is_fond = 2;
@@ -1570,11 +1570,11 @@ void FonduOption(s16 x, s16 y, s16 w, s16 h, u8 mode) {
         if (GameModeVideo == MODE_NORMAL) {
             CaptureVideo(draw_buffer, EffetBufferNormal, 1);
             if (RayEvts.firefly) {
-                set_xywhmap(TabW1[0], TabW2[0], TabH1[0], TabH2[0]);
+                set_xywhmap(TabW1[0], (TabW2[0] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[0], TabH2[0]);
                 sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             }
             DO_FADE_OUT();
-            set_xywhmap(TabW1[SizeScreen], TabW2[SizeScreen], TabH1[SizeScreen], TabH2[SizeScreen]);
+            set_xywhmap(TabW1[SizeScreen], (TabW2[SizeScreen] + SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL), TabH1[SizeScreen], TabH2[SizeScreen]);
             sprite_clipping(Bloc_lim_W1, Bloc_lim_W2, Bloc_lim_H1, Bloc_lim_H2);
             N_CLRSCR(DrawBufferNormal);
         } else {

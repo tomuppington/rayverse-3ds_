@@ -267,7 +267,7 @@ static void ctr_cycle_display_mode(void) {
 // the 320 game columns is scaled vertically once, straight into framebuffer byte order. Screen
 // columns that show a single game column are then plain memcpy()s of that cached column (in wide
 // mode that is 4 out of every 5), and only the columns straddling two game columns are blended.
-#define CTR_MAX_SRC_W 320
+#define CTR_MAX_SRC_W SCREEN_WIDTH_MAX
 static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3] __attribute__((aligned(4)));
 
 static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
@@ -356,8 +356,8 @@ static void ctr_present(app_state_t* app_state) {
 
     if (!ctr_stereo_on) {
         ctr_scale_to_fb(src, src_w, src_h, pal, gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
-    } else if (src_w == 320 && src_h == 200 && stereo_frame_usable(src)) {
-        static u8 eye_buffer[320 * 200];
+    } else if (src_w == SCREEN_WIDTH && src_h == 200 && stereo_frame_usable(src)) {
+        static u8 eye_buffer[SCREEN_WIDTH_MAX * 200];
         s64 t0 = get_clock();
         stereo_compose_eye(eye_buffer, src, -1, slider);
         ctr_compose_ns += get_clock() - t0;

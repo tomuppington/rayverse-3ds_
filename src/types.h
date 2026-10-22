@@ -1,6 +1,11 @@
 
 #define SCREEN_HEIGHT 200
-#define SCREEN_WIDTH 320
+// Widescreen (added for the 3DS port): the width of the game's picture is a variable. It is 320 (the
+// original) everywhere except inside levels when the wide view is on, where it is SCREEN_WIDTH_MAX.
+#define SCREEN_WIDTH_ORIGINAL 320
+#define SCREEN_WIDTH_MAX 400
+extern int screen_width;
+#define SCREEN_WIDTH screen_width
 
 #pragma pack(push,1)
 typedef struct vec2b_t {

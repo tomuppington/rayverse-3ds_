@@ -2188,7 +2188,7 @@ void DO_BAG1_COMMAND(obj_t* obj) {
     DO_ONE_CMD(obj);
     if (obj->sub_etat == 4 && obj->anim_frame == 14 &&
             horloge[obj->eta[obj->main_etat][obj->sub_etat].anim_speed & 0xF] == 0 &&
-            obj->screen_x > -160 && obj->screen_x < 250 &&
+            obj->screen_x > -160 && obj->screen_x < 250 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) &&
             obj->screen_y < SCREEN_HEIGHT - 100
     ) {
         obj->y += 86;
@@ -2548,7 +2548,7 @@ void DO_EAU_QUI_MONTE(obj_t* obj) {
                 scroll_end_y = obj->y - (Bloc_lim_H2 - 80);
             case 4:
             case 5:
-                if (obj->screen_x < -166) {
+                if (obj->screen_x < -166 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2) { // widescreen: wrap window centred
                     obj->x += 505;
                     if (++obj->sub_etat >= 4)
                         obj->sub_etat = 0;
@@ -2556,7 +2556,7 @@ void DO_EAU_QUI_MONTE(obj_t* obj) {
                         var_v0_2 = obj->init_y - 5;
                         goto block_53;
                     }
-                } else if (obj->screen_x > 366) {
+                } else if (obj->screen_x > 366 + (SCREEN_WIDTH - SCREEN_WIDTH_ORIGINAL) / 2) {
                     obj->x -= 505;
                     if (--obj->sub_etat >= 4)
                         obj->sub_etat = 3;
