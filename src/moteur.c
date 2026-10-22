@@ -547,7 +547,16 @@ void freezeAnim(obj_t* obj, u8 a2) {
 bool ray_anim_held;
 
 void DO_ANIM(obj_t* obj) {
-    if (ray_anim_held && obj == &ray) return;
+    if (ray_anim_held && obj == &ray) {
+        // (Still on the state's own animation, never past its last frame.)
+        eta_t* held_eta = get_eta(obj);
+        if (held_eta->anim_index != 255) {
+            obj->anim_index = held_eta->anim_index;
+            anim_t* held_anim = obj->animations + obj->anim_index;
+            if (obj->anim_frame >= held_anim->frames_count) obj->anim_frame = held_anim->frames_count - 1;
+        }
+        return;
+    }
     s32 prev_anim_frame = obj->anim_frame;
     s32 prev_anim_index = obj->anim_index;
     eta_t* eta = get_eta(obj);
