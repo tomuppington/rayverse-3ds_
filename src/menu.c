@@ -633,13 +633,13 @@ static void gfx_page_commande(void) {
 
 static void gfx_page_affiche(void) {
     s16 x = SCREEN_WIDTH / 2;
-    s16 row = ecart_options + 15;
-    s16 y0 = debut_options;
+    s16 row = 22;               // fixed spacing (the options page's spacing depends on its number of rows)
+    s16 y0 = debut_titre + 30;
     display_text("/graphics/", x, debut_titre, 1, 1); // ("graphics details" is too wide for the box in this font)
-    display_text("picture", x, y0, 2, 5);
+    display_text("/picture/", x, y0, 2, 5);
     s32 mode = platform_display_mode_get();
     display_item_t* item = menu_to_display + 9;
-    strcpy(item->text, platform_display_mode_name(mode));
+    snprintf(item->text, sizeof(item->text), "/%s/", platform_display_mode_name(mode)); // "/" = centred
     item->xpos = x;
     item->ypos = y0 + row;
     item->font_size = 2;
