@@ -323,6 +323,37 @@ static bool status_medal_cache_ready;
 static const void* status_medal_cache_sprites; // (filled once per level)
 static u32 status_medal_rgb[BOTTOM_W * BOTTOM_H]; // the kept picture on the panel (0: none)
 
+// The kept pictures are also saved in the game folder (made from the player's game data), so that
+// they are there from the start, even if the first level played has no cages.
+#define STATUS_MEDAL_FILE "RAY3DS.MED"
+static const char status_medal_magic[8] = "RAYMED1";
+
+static void status_medal_cache_save(void) {
+    static bool saved;
+    if (saved) return; // (once per session is enough)
+    FILE* fp = fopen(STATUS_MEDAL_FILE, "wb");
+    if (!fp) return;
+    bool ok = fwrite(status_medal_magic, 1, 8, fp) == 8 &&
+              fwrite(status_medal_cache, sizeof(status_medal_cache), 1, fp) == 1;
+    fclose(fp);
+    saved = ok;
+}
+
+static void status_medal_cache_load(void) {
+    static bool tried;
+    if (tried || status_medal_cache_ready) return;
+    tried = true;
+    FILE* fp = fopen(STATUS_MEDAL_FILE, "rb");
+    if (!fp) return;
+    char magic[8];
+    if (fread(magic, 1, 8, fp) == 8 && memcmp(magic, status_medal_magic, 8) == 0 &&
+        fread(status_medal_cache, sizeof(status_medal_cache), 1, fp) == 1) {
+        status_medal_cache_ready = true;
+        status_medal_cache_sprites = NULL;
+    }
+    fclose(fp);
+}
+
 static void status_medal_cache_fill(obj_t* medal) {
     if (status_medal_cache_ready && status_medal_cache_sprites == medal->sprites) return;
     static u8 scratch[STATUS_MEDAL_CACHE * STATUS_MEDAL_CACHE];
@@ -349,6 +380,7 @@ static void status_medal_cache_fill(obj_t* medal) {
     sprite_clipping(cx0, cx1, cy0, cy1);
     status_medal_cache_ready = true;
     status_medal_cache_sprites = medal->sprites;
+    status_medal_cache_save();
 }
 
 // Redraws the panel if anything on it changed. Returns true if it did.
@@ -419,7 +451,7 @@ bool status_panel_update(void) {
             }
         }
         if (shown >= 0) status_draw_medal_rest(medal, shown, STATUS_MEDAL_X, STATUS_MEDAL_Y);
-    } else if (status_medal_cache_ready) {
+    } else if (status_medal_cache_load(), status_medal_cache_ready) {
         // No medallion in this level: the picture kept from a level that had one.
         const u32* pic = status_medal_cache[cages];
         for (s32 y = 0; y < STATUS_MEDAL_CACHE; ++y) {

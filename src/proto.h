@@ -37,6 +37,7 @@ extern s32 plan0_stride;
 void ps1_music_level_attempt_start(void);
 void ps1_music_seed_planted(void);
 void ps1_music_fade_out(void);
+void ps1_music_boss_beaten(void);
 // stereo.c
 void stereo_capture_background(void);
 void stereo_capture_map_background(void);

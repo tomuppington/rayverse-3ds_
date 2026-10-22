@@ -189,6 +189,7 @@ void prepareNewMoskitoAttack(obj_t* mst_obj) {
                 currentBossActionIsOver = false;
                 break;
             case 22: // dying sequence: fall on the floor
+                ps1_music_boss_beaten(); // 3DS port: PS1 soundtrack, victory music (once)
                 if (mst_obj->init_hit_points == 12) {
                     set_main_and_sub_etat(mst_obj, 0, 19);
                 } else {

@@ -534,6 +534,16 @@ s32 vol_l(s16 a1, s16 a2) {
 
 //7228C
 void PlaySnd(s16 snd, s16 obj_id) {
+    // 3DS port: once Betilla has flown off the screen after giving her power, her flying animation keeps
+    // looping (she stays active) and replays her sparkle sound about every second, fading for some 20
+    // seconds. Skip her sounds once she is entirely off the screen.
+    if (obj_id >= 0 && obj_id < level.nb_objects && level.objects[obj_id].type == TYPE_153_FEE) {
+        obj_t* fee = level.objects + obj_id;
+        s32 feet_y = fee->screen_y + fee->offset_by;
+        if (feet_y < 0 || fee->screen_y > SCREEN_HEIGHT || fee->screen_x + fee->offset_bx * 2 < 0 || fee->screen_x > SCREEN_WIDTH) {
+            return;
+        }
+    }
     if (CarteSonAutorisee) {
         if ((ray.scale != 0 && obj_id == reduced_rayman_id) || obj_id == rayman_obj_id) {
             obj_id = -1;
@@ -734,9 +744,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
             }
             if ((snd == 203 || snd == 237 || snd == 209 || snd == 225 || snd == 236) && (dead_time == 64 || dead_time == 128)) {
                 if (ps1_music_enabled) {
-                    // PS1 (start_cd_bbdead): the music fades out and the victory jingle (sound 21) plays.
-                    ps1_music_fade_out();
-                    PlaySnd_old(21);
+                    ps1_music_boss_beaten(); // PS1 (start_cd_bbdead): fade out, victory jingle
                 } else {
                     start_cd_bbdead();
                 }
@@ -776,6 +784,17 @@ void PlaySnd_old(s16 sound_id) {
                                 hard_sound_table[sound_id].tone,
                                 hard_sound_table[sound_id].note,
                                 Volume_Snd * hard_sound_table[sound_id].volume >> 7, 64);
+            if (voice_index >= 0 && voice_index < (s32)COUNT(digi_voices)) {
+                // 3DS port: a sound played this way (not tied to an object) restarts rather than playing
+                // over its still-sounding previous copy. E.g. the thunder in the stormy levels (sound
+                // 195, 2.25 s) comes at random intervals, sometimes only half a second apart, and two
+                // copies slightly out of step sounded like an echo.
+                for (s32 i = 0; i < (s32)COUNT(digi_voices); ++i) {
+                    if (i != voice_index && digi_voices[i].is_playing && digi_voices[i].data == digi_voices[voice_index].data) {
+                        digi_voices[i].is_playing = false;
+                    }
+                }
+            }
             if (voice_index != -1) {
                 voice_table[voice_index].obj = -2;
                 voice_table[voice_index].vol = 64;

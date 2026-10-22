@@ -246,5 +246,27 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
             s32 xm = stereo_clamp_x(x - shift_main);
             dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
         }
+        if (play_window_boxed) {
+            // 4:3 window (see play_window_boxed): near its edges, the shifted background and main layers
+            // must come from inside the window (not from the black sides, nor the edge of the background
+            // beyond it), and the sides stay black apart from the counters (the front layer).
+            s32 wx0 = Bloc_lim_W1, wx1 = Bloc_lim_W2;
+            s32 margin = MAX(MAX(abs(shift_back), abs(shift_main)), abs(shift_front)) + 1;
+            for (s32 x = 0; x < STEREO_W; ++x) {
+                if (x == wx0 + margin) x = MAX(x, wx1 - margin); // (only the columns near and outside the edges)
+                if (x >= STEREO_W) break;
+                s32 xf = stereo_clamp_x(x - shift_front);
+                if (fin[xf] != main[xf] || (drawn[xf] & 2)) {
+                    dst[x] = fin[xf];
+                } else if (x < wx0 || x >= wx1) {
+                    dst[x] = 0;
+                } else {
+                    s32 xm = x - shift_main, xb = x - shift_back;
+                    xm = xm < wx0 ? wx0 : (xm >= wx1 ? wx1 - 1 : xm);
+                    xb = xb < wx0 ? wx0 : (xb >= wx1 ? wx1 - 1 : xb);
+                    dst[x] = (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[xb];
+                }
+            }
+        }
     }
 }

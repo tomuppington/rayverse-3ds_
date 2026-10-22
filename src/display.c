@@ -430,6 +430,15 @@ void DISPLAY_GAME_VIGNET(void) {
     numero_palette_special = 0;
     DO_FADE_OUT();
 
+    // 3DS port: the picture (e.g. Tarayzan giving the seed) is 320x200: show it at the original picture
+    // size, then go back to the level's picture size and play window.
+    s32 level_w = screen_width, level_h = screen_height;
+    bool level_boxed = play_window_boxed;
+    s32 level_W1 = Bloc_lim_W1, level_W2 = Bloc_lim_W2, level_H1 = Bloc_lim_H1, level_H2 = Bloc_lim_H2;
+    play_window_boxed = false;
+    screen_width = SCREEN_WIDTH_ORIGINAL;
+    screen_height = SCREEN_HEIGHT_ORIGINAL;
+
     s32 xmin, xmax, ymin, ymax;
     get_sprite_clipping(&xmin, &xmax, &ymin, &ymax);
     sprite_clipping(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT);
@@ -460,6 +469,13 @@ void DISPLAY_GAME_VIGNET(void) {
     }
     RESTORE_PALETTE();
     RESTORE_PLAN3();
+    screen_width = level_w;
+    screen_height = level_h;
+    play_window_boxed = level_boxed;
+    Bloc_lim_W1 = level_W1;
+    Bloc_lim_W2 = level_W2;
+    Bloc_lim_H1 = level_H1;
+    Bloc_lim_H2 = level_H2;
     sprite_clipping(xmin, xmax, ymin, ymax);
     INIT_FADE_IN();
 }

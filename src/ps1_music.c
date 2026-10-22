@@ -363,6 +363,9 @@ void music_select_ps1(bool ps1) {
 }
 
 // Start the music for a world/level (world 0 = special music, see the table).
+static s32 ps1_victory_delay = -1;  // frames until the fanfare, or -1
+static bool ps1_victory_played;    // (once per level)
+
 void ps1_play_music(s16 world, s16 level) {
     if (world < 0 || world >= 7 || level < 0 || level >= 22) return;
     ps1_music_world = world;
@@ -370,6 +373,8 @@ void ps1_play_music(s16 world, s16 level) {
     ps1_music_cmd = -1;
     ps1_scroll_locked_audio = false;
     if (world != 0) {
+        ps1_victory_delay = -1;
+        ps1_victory_played = false;
         ps1_seed_audio = false;
         ps1_level_music_after_jingle = false;
         ps1_death_music_armed = true;
@@ -417,6 +422,21 @@ void ps1_music_seed_planted(void) {
     }
 }
 
+// Boss beaten: the PS1 fades the music out and plays its victory jingle (start_cd_bbdead). That jingle is
+// a sequence of the PS1's own synthesised music, which isn't among the CD tracks the player converted;
+// the short win fanfare GAGNE is played instead, once the music has faded (half a second, so that it
+// comes before a boss's level ends, e.g. Bzzit's).
+
+void ps1_music_boss_beaten(void) {
+    if (!ps1_music_enabled || ps1_victory_played) return;
+    ps1_victory_played = true;
+    if (ogg_cd_track.decoder && ogg_cd_track.fade_out_total == 0) {
+        ogg_cd_track.fade_out_total = 44100 * 30 / 60;
+        ogg_cd_track.fade_out_left = ogg_cd_track.fade_out_total;
+    }
+    ps1_victory_delay = 30;
+}
+
 // Boss beaten: the PS1 fades the music out over 90 frames (FUN_80131e40 / PS1_Music_Apply_Fade).
 void ps1_music_fade_out(void) {
     if (ogg_cd_track.decoder && ogg_cd_track.fade_out_total == 0) {
@@ -428,6 +448,11 @@ void ps1_music_fade_out(void) {
 // Called every frame during a level. When the screen scroll locks (boss arenas), the PS1 switches to the level's second music section
 // (change_audio_track_puit in the PS1 code), once per level start.
 void ps1_music_update_in_level(bool rayman_dying) {
+    if (ps1_victory_delay > 0 && --ps1_victory_delay == 0) {
+        ps1_victory_delay = -1;
+        ps1_play_music(0, 0); // GAGNE
+        return;
+    }
     // Death music: the PS1 main loop starts it as soon as Rayman starts dying (dead_time != 64).
     if (rayman_dying && ps1_death_music_armed) {
         ps1_death_music_armed = false;
