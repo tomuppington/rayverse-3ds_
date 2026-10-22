@@ -89,6 +89,22 @@ void play_ogg(game_sound_buffer_t* sound_buffer, ogg_t* ogg) {
 			}
 			ogg->fade_pos += got;
 		}
+		if (ogg->fade_out_total > 0) {
+			s32 n = MIN(got, ogg->fade_out_left);
+			for (s32 i = 0; i < n; ++i) {
+				s32 f = ogg->fade_out_left - i;
+				out[(done + i) * 2]     = (s16)((s32)out[(done + i) * 2]     * f / ogg->fade_out_total);
+				out[(done + i) * 2 + 1] = (s16)((s32)out[(done + i) * 2 + 1] * f / ogg->fade_out_total);
+			}
+			ogg->fade_out_left -= n;
+			if (ogg->fade_out_left <= 0) {
+				// Faded to silence: stop the music (PS1 soundtrack, e.g. after a boss is beaten).
+				done += n;
+				stop_ogg(ogg);
+				is_ogg_playing = false;
+				break;
+			}
+		}
 		if (ogg->samples_left >= 0) ogg->samples_left -= got;
 		done += got;
 		bool segment_ended = (got < want) || ogg->samples_left == 0;
@@ -657,6 +673,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
 
             if (frame_snd[snd] == 0) {
                 // NOTE: the PS1 version implements left/right directional sound here, using SsUtKeyOn
+                keyon_loop_allowed = (sound_table[snd] & 0x10) != 0;
                 s32 voice_id = has_sample ? KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd) : -1;
                 if (voice_id != -1) {
                     erase_voice_table(obj_id);
@@ -671,6 +688,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
             } else {
                 // NOTE: I don't yet know what causes the sound to be emitted in this code path.
                 // So, I added this for now (delete again when it's figured out).
+                keyon_loop_allowed = (sound_table[snd] & 0x10) != 0;
                 if (has_sample) KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
 //                printf("Debug: snd %d, prog %d, tone %d, note %d, vol %d, pan %d\n", snd, prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd);
 
@@ -695,7 +713,11 @@ void PlaySnd(s16 snd, s16 obj_id) {
                 }
             }
             if ((snd == 203 || snd == 237 || snd == 209 || snd == 225 || snd == 236) && (dead_time == 64 || dead_time == 128)) {
-                start_cd_bbdead();
+                if (ps1_music_enabled) {
+                    ps1_music_fade_out(); // PS1: the music fades out when a boss is beaten
+                } else {
+                    start_cd_bbdead();
+                }
             }
             for (s32 i = 0; i < 20; ++i) {
                 if (stk_obj[i] == obj_id || stk_obj[i] == -2) {
@@ -727,6 +749,7 @@ void PlaySnd_old(s16 sound_id) {
     if (CarteSonAutorisee) {
         u8 prog = hard_sound_table[sound_id].prog;
         if (prog != 255) {
+            keyon_loop_allowed = (sound_table[sound_id] & 0x10) != 0;
             voice_index = KeyOn(bank_to_use[sound_id], prog,
                                 hard_sound_table[sound_id].tone,
                                 hard_sound_table[sound_id].note,
@@ -754,13 +777,61 @@ void setpan(s16 obj_id) {
 }
 
 //72F38
+// Implemented for the 3DS port, following the PS1 code (FUN_80168f48 and the second half of setvol in
+// rayman-ps1-decomp), which runs every frame:
+//  - a continuous (looping) sound whose object has gone (deactivated, or no longer tracked) is stopped;
+//  - the volume of each continuous sound follows the distance between its object and Rayman.
+// Without this, a looping sound (e.g. a flying bug's buzz) played forever once started, piling up
+// louder and louder and eventually taking every sound channel, which also left the game silent
+// after pausing (the pause mutes all channels, and nothing turned the looping ones back up).
 void manage_snd(void) {
-    print_once("Not implemented: manage_snd"); //stub
+    for (s32 i = 0; i < COUNT(voice_table); ++i) {
+        voice_t* voice = voice_table + i;
+        if (voice->snd < 0 || voice->snd > 255 || !(sound_table[voice->snd] & 0x10)) {
+            continue;
+        }
+        bool orphaned = (voice->obj == -2) ||
+                        (voice->obj >= 0 && (voice->obj >= level.nb_objects || !level.objects[voice->obj].is_active));
+        if (!digi_voices[i].is_playing) {
+            // Finished by itself (not a looping sample): just forget it.
+            voice_is_working[i] = 0;
+            voice->obj = -2;
+            voice->snd = -1;
+            continue;
+        }
+        if (orphaned) {
+            KeyOff(i, 0, 0, 0, 0);
+            voice_is_working[i] = 0;
+            for (s32 k = 0; k < COUNT(stk_obj); ++k) {
+                if (stk_obj[k] == voice->obj) {
+                    stk_snd[k] = -1;
+                    break;
+                }
+            }
+            voice->obj = -2;
+            voice->snd = -1;
+            continue;
+        }
+        if (voice_is_working[i]) {
+            s32 vol = 127;
+            if (voice->obj >= 0 && voice->obj != rayman_obj_id && voice->snd != 0xCC) {
+                vol = get_vol_snd(level.objects + voice->obj);
+            }
+            voice->vol = (s16)vol;
+            KeyVol(i, Volume_Snd * vol * hard_sound_table[voice->snd].volume >> 14, voice->pan);
+        }
+    }
 }
 
 //730DC
 void mute_snd_bouclant(void) {
-    print_once("Not implemented: mute_snd_bouclant"); //stub
+    // Silence the continuous sounds (PS1 version); manage_snd() turns them back up next frame.
+    for (s32 i = 0; i < COUNT(voice_table); ++i) {
+        s16 snd = voice_table[i].snd;
+        if (snd == 6 || snd == 245 || snd == 2 || (snd >= 0 && snd <= 255 && (sound_table[snd] & 0x10))) {
+            KeyVol(i, 0, 0);
+        }
+    }
 }
 
 //73138
@@ -820,7 +891,7 @@ void TestCdLoop(void) {
             ps1_play_music(num_world, num_level);
             cdTime = 1;
         }
-        ps1_music_update_in_level();
+        ps1_music_update_in_level(dead_time != 64);
         return;
     }
     if (cdTime != 0) {

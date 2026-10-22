@@ -260,6 +260,9 @@ static s16 ps1_music_level;
 static s16 ps1_music_cmd;
 static s16 ps1_excerpt_index;
 static bool ps1_scroll_locked_audio; // PS1_ScrollLockedAudio
+static bool ps1_seed_audio;          // D_801E64B0 in the PS1 code: flood music already started
+static bool ps1_death_music_armed = true; // PS1_CanPlayDeathMusic
+static bool ps1_level_music_after_jingle; // restart the level music once the death jingle ends
 
 void ps1_music_init(void) {
     FILE* fp = fopen("MusicPS1/JUNGLE1.ogg", "rb");
@@ -337,19 +340,73 @@ void ps1_play_music(s16 world, s16 level) {
     ps1_music_level = level;
     ps1_music_cmd = -1;
     ps1_scroll_locked_audio = false;
+    if (world != 0) {
+        ps1_seed_audio = false;
+        ps1_level_music_after_jingle = false;
+        ps1_death_music_armed = true;
+    }
     MusicCdActive = true;
     ps1_music_run();
 }
 
 // Called by play_ogg() when the current track or excerpt has finished.
 bool ps1_music_next_segment(void) {
+    if (ps1_level_music_after_jingle && ps1_music_world == 0 && ps1_music_level == 1) {
+        // The death jingle has finished and Rayman is already back in the level.
+        ps1_level_music_after_jingle = false;
+        ps1_play_music(num_world, num_level);
+        return is_ogg_playing;
+    }
     return ps1_music_run();
 }
 
-// Called every frame during a level. When the screen scroll locks (e.g. the flood in Tarayzan's
-// level, boss arenas), the PS1 switches to the level's second music section
+static bool ps1_death_jingle_playing(void) {
+    return ps1_music_world == 0 && ps1_music_level == 1 && is_ogg_playing && ogg_cd_track.decoder;
+}
+
+// Called each time Rayman (re)starts a level attempt, i.e. after every death too. The PS1 restarts the
+// level music from the beginning after a death, once the death jingle has finished (DEPART_DEAD_LOOP
+// and PS1_StopLevelMusic in the PS1 code). The first attempt's music is started by TestCdLoop.
+void ps1_music_level_attempt_start(void) {
+    if (!ps1_death_music_armed) {
+        ps1_death_music_armed = true;
+        if (ps1_death_jingle_playing()) {
+            ps1_level_music_after_jingle = true;
+        } else {
+            ps1_play_music(num_world, num_level);
+        }
+    }
+}
+
+// The PS1 starts the flood music in Tarayzan's level the first time Rayman plants a magic seed while
+// the water is there (in RAY_SWIP / FUN_8013202c in the PS1 code): the level's second music section.
+void ps1_music_seed_planted(void) {
+    if (!ps1_seed_audio) {
+        ps1_seed_audio = true;
+        ps1_music_cmd = 1;
+        ps1_music_run();
+    }
+}
+
+// Boss beaten: the PS1 fades the music out over 90 frames (FUN_80131e40 / PS1_Music_Apply_Fade).
+void ps1_music_fade_out(void) {
+    if (ogg_cd_track.decoder && ogg_cd_track.fade_out_total == 0) {
+        ogg_cd_track.fade_out_total = 44100 * 90 / 60;
+        ogg_cd_track.fade_out_left = ogg_cd_track.fade_out_total;
+    }
+}
+
+// Called every frame during a level. When the screen scroll locks (boss arenas), the PS1 switches to the level's second music section
 // (change_audio_track_puit in the PS1 code), once per level start.
-void ps1_music_update_in_level(void) {
+void ps1_music_update_in_level(bool rayman_dying) {
+    // Death music: the PS1 main loop starts it as soon as Rayman starts dying (dead_time != 64).
+    if (rayman_dying && ps1_death_music_armed) {
+        ps1_death_music_armed = false;
+        ps1_level_music_after_jingle = false;
+        ps1_play_music(0, 1);
+        return;
+    }
+    if (!ps1_death_music_armed) return; // don't switch sections during the death jingle
     if (scrollLocked && !ps1_scroll_locked_audio) {
         ps1_scroll_locked_audio = true;
         ps1_music_cmd = 1;

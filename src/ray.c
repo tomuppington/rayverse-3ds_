@@ -2633,6 +2633,7 @@ void DO_RAYMAN(void) {
                 DO_GROWING_PLATFORM();
                 if (eau_obj_id != -1) {
                     level.objects[eau_obj_id].iframes_timer = 1;
+                    if (ps1_music_enabled) ps1_music_seed_planted(); // PS1: the flood music starts
                 }
             } else if (ray.sub_etat == 21 || ray.sub_etat == 20) {
                 remoteControlRay();

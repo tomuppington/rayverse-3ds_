@@ -153,9 +153,17 @@ void LoadBnkWorld(s16 world) {
     }
 }
 
+// Set by the caller just before KeyOn(): whether the sample may use its loop points. The sound banks
+// give loop points for some samples that the game also plays as one-shots (e.g. a bug's buzz), so only
+// the sounds the game treats as continuous (flag 0x10 in sound_table, which it then manages and stops,
+// see manage_snd) loop. Reset after every KeyOn.
+bool keyon_loop_allowed;
+
 //3EABC
 s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
 //    printf("KeyOn: bank %d prog %d tone %d note %d volume %d pan %d\n", bank, prog, tone, note, volume, pan);
+    bool loop_allowed = keyon_loop_allowed;
+    keyon_loop_allowed = false;
     snd_t snd = {0};
     s32 sample_rate = 11025;
     float base_note = 54.5f; // NOTE: I determined this value by trial and error, it may not be exactly correct
@@ -173,7 +181,7 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
     }
     bnk_header_t* loop_header = (bank == 1) ? bnkHeaderWorld + prog : bnkHeaderFixe + prog;
     // field_8 / field_C of the bank header are the loop start / end (0, 0 for one-shot samples).
-    if (loop_header->field_C > loop_header->field_8 && loop_header->field_C <= loop_header->size) {
+    if (loop_allowed && loop_header->field_C > loop_header->field_8 && loop_header->field_C <= loop_header->size) {
         snd.loop_start = loop_header->field_8;
         snd.loop_end = loop_header->field_C;
     }
@@ -200,17 +208,26 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
         snd.volume = MIN(1.0f, (float)volume / 50.0f);
     }
     s16 voice_index = play_digi_snd(&snd);
+    if (voice_index >= 0 && voice_index < COUNT(voice_table)) {
+        // This channel now plays a new sound: forget what the voice table said about its previous one
+        // (the caller fills it in again if it tracks this sound), so manage_snd() can't stop it by mistake.
+        voice_table[voice_index].obj = -2;
+        voice_table[voice_index].snd = -1;
+        voice_is_working[voice_index] = 0;
+    }
     return voice_index;
 }
 
 //3EC0C
 void KeyOff(u32 voice_id, u8 bank, u8 prog, u8 tone, u8 note) {
+    if (voice_id >= COUNT(digi_voices)) return; // added: guard against invalid voice ids
     snd_t* digi_voice = digi_voices + voice_id;
     digi_voice->is_playing = false;
 }
 
 //3EC1C
 void KeyVol(s32 voice_id, s32 volume, s32 pan) {
+    if (voice_id < 0 || voice_id >= COUNT(digi_voices)) return; // added: guard against invalid voice ids
     snd_t* digi_voice = digi_voices + voice_id;
     digi_voice->volume = MIN(1.0f, (float)volume / 50.0f);
 }

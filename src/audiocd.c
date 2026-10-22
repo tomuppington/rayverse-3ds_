@@ -44,8 +44,7 @@ void start_cd_gros_rayman(void) {
 //1CF80
 void start_cd_perdu(void) {
     if (ps1_music_enabled) {
-        ps1_play_music(0, 1); // PS1: death music
-        return;
+        return; // PS1 soundtrack: the death music starts from ps1_music_update_in_level()
     }
     if (CarteSonAutorisee) {
         PlayTchatchVignette(8);

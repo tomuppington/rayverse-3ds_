@@ -187,7 +187,7 @@ typedef struct ctr_scale_axis_t {
     s32 out_size;
     s32 src_size;
     s16 src_index[800];   // first source pixel covered by each output pixel
-    u16 weight[800];      // share (0..256) of that first source pixel; the rest is the next one
+    u16 weight[800];      // share of that first source pixel: 64, 128, 192 or 256 (the rest is the next one)
 } ctr_scale_axis_t;
 
 static ctr_scale_axis_t ctr_axis_x, ctr_axis_y;
@@ -201,12 +201,19 @@ static void ctr_build_axis(ctr_scale_axis_t* axis, s32 src_size, s32 out_size) {
         s32 b = a + src_size;
         s32 first = a / out_size;
         s32 first_end = (first + 1) * out_size;
-        u16 weight = 256;
+        s32 weight = 256;
         if (b > first_end) {
-            weight = (u16)(((first_end - a) * 256 + src_size / 2) / src_size);
+            weight = ((first_end - a) * 256 + src_size / 2) / src_size;
+            // Round to quarters, so that blending is just one or two byte-average instructions
+            // (the horizontal shares are exact quarters already; vertically the difference is invisible).
+            weight = ((weight + 32) / 64) * 64;
+            if (weight == 0) {
+                first += 1; // (almost) entirely the next pixel
+                weight = 256;
+            }
         }
-        axis->src_index[i] = (s16)first;
-        axis->weight[i] = weight;
+        axis->src_index[i] = (s16)MIN(first, src_size - 1);
+        axis->weight[i] = (u16)weight;
     }
 }
 
@@ -227,13 +234,22 @@ static void ctr_setup_display_mode(s32 src_w, s32 src_h) {
     ctr_build_axis(&ctr_axis_y, src_h, MIN(mode->out_h, CTR_TOP_H));
 }
 
-static inline u32 ctr_blend(u32 c0, u32 c1, u32 w0) {
-    // Blend two B,G,R,A pixels; w0 = share of c0 out of 256.
-    if (w0 >= 256) return c0;
-    u32 w1 = 256 - w0;
-    u32 rb = (((c0 & 0x00FF00FF) * w0 + (c1 & 0x00FF00FF) * w1) >> 8) & 0x00FF00FF;
-    u32 g  = (((c0 & 0x0000FF00) * w0 + (c1 & 0x0000FF00) * w1) >> 8) & 0x0000FF00;
-    return rb | g;
+// Average of four byte pairs at once, rounding down (ARMv6 SIMD instruction UHADD8 on the 3DS).
+static inline u32 ctr_avg8(u32 a, u32 b) {
+#if defined(__3DS__)
+    u32 r;
+    __asm__("uhadd8 %0, %1, %2" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+#else
+    return (a & b) + (((a ^ b) & 0xFEFEFEFEu) >> 1);
+#endif
+}
+
+// Blend four byte pairs; w = share of a out of 256, one of 64, 128 or 192.
+static inline u32 ctr_mix8(u32 a, u32 b, u32 w) {
+    u32 m = ctr_avg8(a, b);
+    if (w == 128) return m;
+    return (w > 128) ? ctr_avg8(a, m) : ctr_avg8(m, b);
 }
 
 static void ctr_cycle_display_mode(void) {
@@ -250,7 +266,7 @@ static void ctr_cycle_display_mode(void) {
 // columns that show a single game column are then plain memcpy()s of that cached column (in wide
 // mode that is 4 out of every 5), and only the columns straddling two game columns are blended.
 #define CTR_MAX_SRC_W 320
-static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3];
+static u8 ctr_col_cache[CTR_MAX_SRC_W][CTR_TOP_H * 3] __attribute__((aligned(4)));
 
 static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal, u8* fb) {
     s32 w = ctr_axis_x.out_size;
@@ -260,28 +276,40 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
     }
     s32 ox = (ctr_fb_w - w) / 2;
     s32 oy = (CTR_TOP_H - h) / 2;
-    s32 last_y = src_h - 1;
     s32 col_bytes = h * 3;
     s32 first_px = CTR_TOP_H - oy - h; // framebuffer index (from the bottom) of the lowest picture pixel
 
+    // Row tables, bottom row first (the framebuffer's order): source offsets and blend shares.
+    static s32 row_off0[CTR_TOP_H], row_off1[CTR_TOP_H];
+    static u16 row_w[CTR_TOP_H];
+    for (s32 q = 0; q < h; ++q) {
+        s32 y = h - 1 - q;
+        s32 sy0 = ctr_axis_y.src_index[y];
+        row_off0[q] = sy0 * src_w;
+        row_off1[q] = MIN(sy0 + 1, src_h - 1) * src_w;
+        row_w[q] = ctr_axis_y.weight[y];
+    }
+
     // 1. Scale each game column vertically, into framebuffer order (bottom row first).
     for (s32 sx = 0; sx < src_w; ++sx) {
+        const u8* col = src + sx;
         u8* out = ctr_col_cache[sx];
         for (s32 q = 0; q < h; ++q) {
-            s32 y = h - 1 - q; // q = 0 is the bottom of the picture
-            s32 sy0 = ctr_axis_y.src_index[y];
-            u32 wy = ctr_axis_y.weight[y];
-            u32 c = pal[src[sy0 * src_w + sx]];
-            if (wy < 256) {
-                c = ctr_blend(c, pal[src[MIN(sy0 + 1, last_y) * src_w + sx]], wy);
+            u32 c = pal[col[row_off0[q]]];
+            u32 wy = row_w[q];
+            if (wy != 256) {
+                c = ctr_mix8(c, pal[col[row_off1[q]]], wy);
             }
-            out[q * 3 + 0] = (u8)(c);
-            out[q * 3 + 1] = (u8)(c >> 8);
-            out[q * 3 + 2] = (u8)(c >> 16);
+            out[0] = (u8)(c);
+            out[1] = (u8)(c >> 8);
+            out[2] = (u8)(c >> 16);
+            out += 3;
         }
     }
 
-    // 2. Copy (or blend) cached columns into the framebuffer.
+    // 2. Copy (or blend) cached columns into the framebuffer. Each column is a multiple of 4 bytes and
+    // starts on a 4-byte boundary, so blending works on 4 bytes at a time.
+    s32 col_words = col_bytes / 4;
     for (s32 x = 0; x < w; ++x) {
         s32 sx0 = ctr_axis_x.src_index[x];
         u32 wx = ctr_axis_x.weight[x];
@@ -289,11 +317,15 @@ static void ctr_scale_to_fb(const u8* src, s32 src_w, s32 src_h, const u32* pal,
         if (wx >= 256 || sx0 + 1 >= src_w) {
             memcpy(dest, ctr_col_cache[sx0], col_bytes);
         } else {
-            const u8* a = ctr_col_cache[sx0];
-            const u8* b = ctr_col_cache[sx0 + 1];
-            u32 w1 = 256 - wx;
-            for (s32 i = 0; i < col_bytes; ++i) {
-                dest[i] = (u8)((a[i] * wx + b[i] * w1) >> 8);
+            const u32* a = (const u32*)ctr_col_cache[sx0];
+            const u32* b = (const u32*)ctr_col_cache[sx0 + 1];
+            u32* d = (u32*)dest;
+            if (wx == 128) {
+                for (s32 i = 0; i < col_words; ++i) d[i] = ctr_avg8(a[i], b[i]);
+            } else if (wx > 128) {
+                for (s32 i = 0; i < col_words; ++i) d[i] = ctr_avg8(a[i], ctr_avg8(a[i], b[i]));
+            } else {
+                for (s32 i = 0; i < col_words; ++i) d[i] = ctr_avg8(ctr_avg8(a[i], b[i]), b[i]);
             }
         }
     }
@@ -348,7 +380,10 @@ void ctr_advance_frame(app_state_t* app_state) {
     }
 
     ctr_process_input();
+    s64 present_start = get_clock();
     ctr_present(app_state);
+    static s64 present_ns_total;
+    present_ns_total += get_clock() - present_start;
     ctr_produce_sound_for_frame(app_state, &app_state->game.sound_buffer);
 
     gfxFlushBuffers();
@@ -367,8 +402,11 @@ void ctr_advance_frame(app_state_t* app_state) {
         float seconds = (float)(before_wait - stats_start) / 1e9f;
         s32 fps = (s32)((float)stats_frames / seconds + 0.5f);
         s32 load = (s32)(100.0f * (float)busy_ns_total / (float)(before_wait - stats_start) + 0.5f);
+        printf("\x1b[28;0HScreen drawing: %4.1f ms per frame%s   ", (double)present_ns_total / 1e6 / stats_frames,
+               ctr_stereo_on ? " (3D)" : "");
         printf("\x1b[29;0HSpeed: %2d fps  CPU: %3d%%  sound gaps: %lu   ", fps, load,
                (unsigned long)(ctr_snd_underruns - underruns_at_start));
+        present_ns_total = 0;
         busy_ns_total = 0;
         stats_frames = 0;
         stats_start = before_wait;

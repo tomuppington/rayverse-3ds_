@@ -32,6 +32,9 @@ void DO_MAIN_LOOP_PC_NORMAL(u8* a1) {
     MapTimePause = 0;
     ProchainEclair = 0;
     numero_palette_special = 0;
+    if (MusicCdActive && ps1_music_enabled) {
+        ps1_music_level_attempt_start(); // PS1 soundtrack: restart the level music after a death
+    }
     if (MusicCdActive) {
         TestCdLoop();
     }

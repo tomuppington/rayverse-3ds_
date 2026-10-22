@@ -141,6 +141,8 @@ typedef struct ogg_t {
     s32 samples_left;  // stop after this many samples (-1: play to the end)
     s32 fade_total;    // fade in over this many samples (0: no fade)
     s32 fade_pos;
+    s32 fade_out_total; // fading out over this many samples (0: not fading out)
+    s32 fade_out_left;  // samples left until silence; the track then stops
 } ogg_t;
 
 

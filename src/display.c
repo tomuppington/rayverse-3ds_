@@ -290,8 +290,10 @@ s16 WORLD_CHOICE(u32 a1) {
     draw_buffer = EffetBufferNormal;
 
     DisplayJumellesFondNormal();
+    stereo_capture_map_background(); // 3DS port: snapshot for stereoscopic 3D (see stereo.c)
     display2(&ray);
     DISPLAY_PLAT_WAY();
+    stereo_capture_before_hud(); // 3DS port: snapshot for stereoscopic 3D
 
     s32 v0 = 3 * RayonJumelle + 3;
     if (v0 >= 0) {
