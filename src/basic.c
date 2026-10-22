@@ -1642,6 +1642,7 @@ void FatalError(char* message) {
     InitTextMode();
     printf("Rayman says fatal error :\n%s\n", message);
     //PrintMemInfo();
+    fatal_error(); // (3DS port: shows the message and waits for START)
     exit(-1);
     //stub
 }

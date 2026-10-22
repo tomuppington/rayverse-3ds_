@@ -15,6 +15,23 @@
 
 static PrintConsole ctr_console;       // messages (top 26 rows of the bottom screen)
 static PrintConsole ctr_stats_console; // speed readout (bottom 4 rows), so messages can't scroll it away
+
+// While the bottom screen shows pictures (status panel, menus, rays), the text consoles write into this
+// off-screen copy instead, so the game's occasional messages (between levels, in menus) never flash up
+// over the pictures. It is the same layout as the screen, so it can be shown again as it is.
+static u16 ctr_console_hidden_fb[320 * 240];
+static bool ctr_console_hidden;
+
+static void ctr_console_hide(bool hide) {
+    if (hide == ctr_console_hidden) return;
+    u16* screen = (u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
+    if (!hide) {
+        memcpy(screen, ctr_console_hidden_fb, sizeof(ctr_console_hidden_fb)); // (what was written meanwhile)
+    }
+    ctr_console.frameBuffer = hide ? ctr_console_hidden_fb : screen;
+    ctr_stats_console.frameBuffer = hide ? ctr_console_hidden_fb : screen;
+    ctr_console_hidden = hide;
+}
 static s64 ctr_compose_ns; // 3D: time spent building the two eye pictures this frame
 static bool ctr_gfx_ready;
 
@@ -68,6 +85,7 @@ void ctr_fatal_error(void) {
         _Exit(1);
     }
     in_fatal_error = true;
+    ctr_console_hide(false); // (show the messages, including the error)
     printf("\nRayverse stopped because of an error.\n");
     ctr_wait_for_start();
     exit(1);
@@ -476,6 +494,7 @@ static void ctr_draw_bottom_picture(void) {
         }
     }
     ctr_bottom_menu_shown = true;
+    ctr_console_hide(true);
 }
 
 // The rays alone on the bottom screen (outside levels), drawn at half resolution.
@@ -495,10 +514,12 @@ static void ctr_draw_bottom_rays(void) {
         }
     }
     ctr_bottom_menu_shown = true;
+    ctr_console_hide(true);
 }
 
 static void ctr_restore_bottom_console(void) {
     // Menu closed: give the bottom screen back to the text console (the speed readout redraws itself).
+    ctr_console_hide(false);
     consoleSelect(&ctr_stats_console);
     consoleClear();
     consoleSelect(&ctr_console);
@@ -628,12 +649,14 @@ static void ctr_present(app_state_t* app_state) {
         bottom_level_render((u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL), menu_below,
                             game_src, game_w, game_h, game->draw_palette.colors);
         ctr_bottom_menu_shown = true;
+        ctr_console_hide(true);
     } else if (title_menu || title_menu_held || map_dialog || map_dialog_held) {
         ctr_draw_bottom_picture();
     } else if (!ctr_show_stats) {
         // Between levels, on the world map...: the dark rays.
         bottom_idle_render((u16*)gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL));
         ctr_bottom_menu_shown = true;
+        ctr_console_hide(true);
     } else if (ctr_bottom_menu_shown) {
         ctr_restore_bottom_console();
     }
