@@ -142,6 +142,19 @@ static void headless_save_anaglyph(app_state_t* app_state, const char* name) {
         fputc(l.r, fp); fputc(r.g, fp); fputc(r.b, fp);
     }
     fclose(fp);
+    // Also each eye on its own (for close inspection).
+    for (s32 e = 0; e < 2; ++e) {
+        snprintf(path, sizeof(path), "%s/%s_%c.ppm", headless_out_dir, name, e ? 'R' : 'L');
+        fp = fopen(path, "wb");
+        if (!fp) return;
+        fprintf(fp, "P6 %d %d 255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
+        const u8* eye = e ? right : left;
+        for (s32 i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) {
+            rgb_t c = game->draw_palette.colors[eye[i]];
+            fputc(c.r, fp); fputc(c.g, fp); fputc(c.b, fp);
+        }
+        fclose(fp);
+    }
 }
 
 static void headless_key(u8 sc, bool down) {

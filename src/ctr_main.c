@@ -190,6 +190,7 @@ static s32 ctr_fb_w = CTR_TOP_W; // current top framebuffer width (400, or 800 i
 // The depth comes from stereo.c; the slider position scales it.
 static bool ctr_stereo_on;          // slider up this frame
 static bool ctr_stereo_configured;  // display currently set up for 3D
+static bool ctr_map_unscaled;       // set up for the world map shown unscaled (1:1 mode)
 
 typedef struct ctr_scale_axis_t {
     s32 out_size;
@@ -238,8 +239,16 @@ static void ctr_setup_display_mode(s32 src_w, s32 src_h) {
     ctr_stereo_configured = ctr_stereo_on;
     ctr_fb_w = wide ? 800 : CTR_TOP_W;
     s32 out_w = (mode->wide && !wide) ? mode->out_w / 2 : mode->out_w;
+    s32 out_h = mode->out_h;
+    ctr_map_unscaled = mode->wide_view && dans_la_map_monde;
+    if (ctr_map_unscaled) {
+        // 1:1 mode, world map: show the original picture unscaled in the middle of the screen (the
+        // black around the binoculars simply continues to the edges). Also a plain copy, so fast.
+        out_w = src_w;
+        out_h = src_h;
+    }
     ctr_build_axis(&ctr_axis_x, src_w, MIN(out_w, ctr_fb_w));
-    ctr_build_axis(&ctr_axis_y, src_h, MIN(mode->out_h, CTR_TOP_H));
+    ctr_build_axis(&ctr_axis_y, src_h, MIN(out_h, CTR_TOP_H));
 }
 
 // Average of four byte pairs at once, rounding down (ARMv6 SIMD instruction UHADD8 on the 3DS).
@@ -398,7 +407,8 @@ static void ctr_present(app_state_t* app_state) {
     ctr_stereo_on = slider > 0.05f;
     stereo_wanted = ctr_stereo_on; // record 3D layers in the next frames only while the slider is up
     if (ctr_axis_x.out_size == 0 || ctr_axis_x.src_size != src_w || ctr_axis_y.src_size != src_h ||
-        ctr_stereo_configured != ctr_stereo_on) {
+        ctr_stereo_configured != ctr_stereo_on ||
+        ctr_map_unscaled != (ctr_display_modes[ctr_display_mode].wide_view && dans_la_map_monde)) {
         ctr_setup_display_mode(src_w, src_h);
     }
 

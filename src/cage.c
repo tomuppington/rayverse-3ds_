@@ -93,9 +93,14 @@ void ALLOCATE_MEDAILLON_TOON(void) {
     for (s32 i = 0; i < level.nb_objects; ++i) {
         obj_t* cur_obj = level.objects + i;
         if (cur_obj->type == TYPE_197_MEDAILLON_TOON && !cur_obj->is_active) {
-            // 3DS port: centred on the current picture size (the original assumed 320x200).
-            cur_obj->init_x = cur_obj->x = xmap - (cur_obj->offset_bx - SCREEN_WIDTH / 2);
-            cur_obj->init_y = cur_obj->y = ymap - cur_obj->offset_by + (SCREEN_HEIGHT - SCREEN_HEIGHT_ORIGINAL) / 2;
+            cur_obj->init_x = cur_obj->x = xmap - (cur_obj->offset_bx - 160);
+            cur_obj->init_y = cur_obj->y = ymap - cur_obj->offset_by;
+            if (SCREEN_WIDTH != SCREEN_WIDTH_ORIGINAL || SCREEN_HEIGHT != SCREEN_HEIGHT_ORIGINAL) {
+                // 3DS port (1:1 mode): the resting medallion (92x92) is drawn centred on (162, 81) by the
+                // original placement (measured, the same in every world); move it to the exact centre.
+                cur_obj->init_x = cur_obj->x = xmap - cur_obj->offset_bx + SCREEN_WIDTH / 2 - 2;
+                cur_obj->init_y = cur_obj->y = ymap - cur_obj->offset_by + SCREEN_HEIGHT / 2 - 81;
+            }
             cur_obj->flags.alive = 1;
             cur_obj->is_active = 1;
             add_alwobj(cur_obj);
