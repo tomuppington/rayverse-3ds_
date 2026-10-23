@@ -412,18 +412,6 @@ void ps1_music_level_attempt_start(void) {
     }
 }
 
-// Mr Stone's chase in the Blue Mountains: the level's music has a second section (Mr Stone's music)
-// after the ambient one, which the PS1 switches to on a scroll lock (change_audio_track_puit). The
-// chase (DO_BBMONT2_COMMAND, still not decompiled from the PS1 code) doesn't lock the scroll in this
-// version, so the switch is made when Mr Stone starts pushing the screen along (bbmont.c). Once per
-// level start, like the scroll lock.
-void ps1_music_chase_started(void) {
-    if (!ps1_music_enabled || ps1_scroll_locked_audio || !ps1_death_music_armed) return;
-    ps1_scroll_locked_audio = true;
-    ps1_music_cmd = 1;
-    ps1_music_run();
-}
-
 // The PS1 starts the flood music in Tarayzan's level the first time Rayman plants a magic seed while
 // the water is there (in RAY_SWIP / FUN_8013202c in the PS1 code): the level's second music section.
 void ps1_music_seed_planted(void) {

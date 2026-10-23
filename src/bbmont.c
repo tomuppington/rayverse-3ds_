@@ -1187,7 +1187,6 @@ void DO_BBMONT2_COMMAND(obj_t* obj) {
     }
     if ((bb1.field1_0x2 < 8) && (Phase != 0) && (Phase != 5))
     {
-        ps1_music_chase_started(); // 3DS port: the PS1's chase music, as the screen starts scrolling with him
         if (scroll_end_x == xmapmax)
         {
             scroll_end_x = xmap;

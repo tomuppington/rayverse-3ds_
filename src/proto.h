@@ -39,7 +39,6 @@ void ps1_music_seed_planted(void);
 void ps1_music_fade_out(void);
 void ps1_music_boss_beaten(void);
 bool ps1_victory_jingle_playing(void);
-void ps1_music_chase_started(void);
 extern bool ray_anim_held;
 // stereo.c
 void stereo_capture_background(void);
