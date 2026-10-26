@@ -185,6 +185,80 @@ void unlock_audio(void) {
     //stub // TODO: prevent reading after sound banks have been freed (need to acquire a lock!)
 }
 
+// 3DS port: the PS1's looping sound sequences that follow an object (PS1_PlaySnd with a loop count of 0,
+// then SsSepSetVol from the object's distance every frame): the Musician's guitar in the Blue Mountains
+// (sound 103, sequence 22 = world bank sequence 3). The PC version has nothing there. Played from
+// MusicPS1/MONGUIT.ogg (converted from the player's disc), over the music, if it is there.
+typedef struct ps1_loop_snd_t {
+    s16* pcm;        // the whole loop, stereo, 44100 Hz
+    s32 frames;
+    s32 pos;
+    s16 obj;         // the object it follows
+    bool playing;
+    s32 vol_l, vol_r; // 0..32768
+} ps1_loop_snd_t;
+static ps1_loop_snd_t ps1_guitar;
+
+static void ps1_guitar_stop(void) {
+    ps1_guitar.playing = false;
+}
+
+static void ps1_guitar_start(s16 obj_id) {
+    if (ps1_guitar.playing || obj_id < 0 || obj_id >= level.nb_objects) return;
+    if (!ps1_guitar.pcm) {
+        static bool missing;
+        if (missing) return;
+        int channels = 0, rate = 0;
+        short* pcm = NULL;
+        int frames = stb_vorbis_decode_filename("MusicPS1/MONGUIT.ogg", &channels, &rate, &pcm);
+        if (frames <= 0 || channels != 2 || !pcm) {
+            if (pcm) free(pcm);
+            missing = true;
+            return;
+        }
+        ps1_guitar.pcm = pcm;
+        ps1_guitar.frames = frames;
+    }
+    ps1_guitar.obj = obj_id;
+    ps1_guitar.pos = 0;
+    ps1_guitar.vol_l = ps1_guitar.vol_r = 0;
+    ps1_guitar.playing = true;
+}
+
+// Every frame (manage_snd): volume and stereo position from the object's distance; stops when far away
+// or when the object is no longer active, as on the PS1.
+static void ps1_guitar_update(void) {
+    if (!ps1_guitar.playing) return;
+    if (ps1_guitar.obj < 0 || ps1_guitar.obj >= level.nb_objects || !level.objects[ps1_guitar.obj].is_active) {
+        ps1_guitar_stop();
+        return;
+    }
+    obj_t* obj = level.objects + ps1_guitar.obj;
+    s32 vol = get_vol_snd(obj);
+    if (vol <= 5) {
+        ps1_guitar_stop();
+        return;
+    }
+    s32 pan = get_pan_snd(obj);
+    s32 v = (Volume_Snd * vol) >> 7; // 0..127, as SsSepSetVol gets it
+    ps1_guitar.vol_l = vol_l(v, pan) * 32768 / 127;
+    ps1_guitar.vol_r = vol_r(v, pan) * 32768 / 127;
+}
+
+static void ps1_guitar_mix(game_sound_buffer_t* output_buffer) {
+    if (!ps1_guitar.playing || !ps1_guitar.pcm) return;
+    s16* dest = output_buffer->samples;
+    for (s32 j = 0; j < output_buffer->sample_count; ++j) {
+        const s16* src = ps1_guitar.pcm + ps1_guitar.pos * 2;
+        s32 l = dest[0] + ((src[0] * ps1_guitar.vol_l) >> 15);
+        s32 r = dest[1] + ((src[1] * ps1_guitar.vol_r) >> 15);
+        dest[0] = (s16)MIN(32767, MAX(-32768, l));
+        dest[1] = (s16)MIN(32767, MAX(-32768, r));
+        dest += 2;
+        if (++ps1_guitar.pos >= ps1_guitar.frames) ps1_guitar.pos = 0;
+    }
+}
+
 void game_get_sound_samples(game_sound_buffer_t* output_buffer) {
     // Start with silence (zero everything)
     s32 bytes_per_sample = sizeof(short) * 2;
@@ -196,6 +270,7 @@ void game_get_sound_samples(game_sound_buffer_t* output_buffer) {
 			play_ogg(output_buffer, &ogg_cd_track);
 		}
 	}
+    ps1_guitar_mix(output_buffer); // (3DS port, see above)
 
     // Play digi sounds
     lock_audio();
@@ -289,6 +364,7 @@ void SetVolumeSound(s16 volume) {
 
 //71C10
 void stop_all_snd(void) {
+    ps1_guitar_stop(); // (3DS port)
     if (CarteSonAutorisee) {
         for (s32 i = 0; i < COUNT(voice_table); ++i) {
             KeyOff(i, 0, 0, 0, 0);
@@ -642,6 +718,12 @@ void PlaySnd(s16 snd, s16 obj_id) {
                 tone = hard_sound_table[19].tone;
                 note = hard_sound_table[19].note;
                 break;
+            case 103:
+                ps1_guitar_start(obj_id); // 3DS port: the Musician's guitar (PS1 only; see ps1_guitar_start)
+                prog = hard_sound_table[103].prog;
+                tone = hard_sound_table[103].tone;
+                note = hard_sound_table[103].note;
+                break;
             case 245:
                 prog = hard_sound_table[245].prog;
                 tone = hard_sound_table[245].tone;
@@ -826,6 +908,7 @@ void setpan(s16 obj_id) {
 // louder and louder and eventually taking every sound channel, which also left the game silent
 // after pausing (the pause mutes all channels, and nothing turned the looping ones back up).
 void manage_snd(void) {
+    ps1_guitar_update(); // (3DS port)
     for (s32 i = 0; i < COUNT(voice_table); ++i) {
         voice_t* voice = voice_table + i;
         if (voice->snd < 0 || voice->snd > 255 || !(sound_table[voice->snd] & 0x10)) {
