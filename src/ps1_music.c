@@ -36,7 +36,7 @@ static const ps1_music_cmd_t ps1_level_music[7][22][4] = {
         {{0x01, 29}, {0x03, 0}, {0x00, 0}, {0x00, 0}}, // 9
         {{0x01, 38}, {0x03, 0}, {0x00, 0}, {0x00, 0}}, // 10
         {{0x01, 53}, {0x01, 54}, {0x03, 1}, {0x00, 0}}, // 11 (3DS port: boss beaten: BOSSWIN, then BOSSLOOP over and over - see below)
-        {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 12
+        {{0x01, 55}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 12 (3DS port: level won: Rayman's "Yeah!" jingle - see ps1_music_level_won)
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 13
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 14
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 15
@@ -193,7 +193,7 @@ static const ps1_music_cmd_t ps1_level_music[7][22][4] = {
     },
 };
 
-static const char* ps1_track_names[55] = {
+static const char* ps1_track_names[56] = {
     "FEE",
     "SUSPENC",
     "RAP",
@@ -253,7 +253,8 @@ static const char* ps1_track_names[55] = {
     // player's disc into MusicPS1 like the other tracks: the first time through, then the rest of the
     // repeats (with the last chord and the reverb carrying over into the start).
     "BOSSWIN",
-    "BOSSLOOP"
+    "BOSSLOOP",
+    "YEAH"
 };
 
 static const s32 ps1_excerpt_offsets[4] = {300, 900, 600, 1200}; // in CD sectors (1/75 s), from the PS1 code
@@ -397,8 +398,12 @@ void ps1_play_music(s16 world, s16 level) {
 }
 
 // The level-won fanfare (start_cd_gagne).
+// Level won: Rayman's "Yeah!" jingle, a sequence of the PS1's own synthesised sounds (not a CD track),
+// converted from the player's disc into MusicPS1/YEAH.ogg; if it isn't there, the CD track GAGNE.
 void ps1_music_level_won(void) {
-    ps1_play_music(0, 0); // (the boss jingle repeats until other music starts, as on the PS1)
+    FILE* jingle = fopen("MusicPS1/YEAH.ogg", "rb");
+    if (jingle) fclose(jingle);
+    ps1_play_music(0, jingle ? 12 : 0);
 }
 
 // Called by play_ogg() when the current track or excerpt has finished.
@@ -460,7 +465,7 @@ void ps1_music_boss_beaten(void) {
 bool ps1_victory_jingle_playing(void) {
     if (!ps1_music_enabled) return false;
     if (ps1_victory_delay > 0) return true;
-    return ps1_music_world == 0 && ps1_music_level == 0 && is_ogg_playing && ogg_cd_track.decoder; // (the level-won fanfare; the boss jingle repeats)
+    return ps1_music_world == 0 && (ps1_music_level == 0 || ps1_music_level == 12) && is_ogg_playing && ogg_cd_track.decoder; // (the level-won fanfare; the boss jingle repeats)
 }
 
 // Boss beaten: the PS1 fades the music out over 90 frames (FUN_80131e40 / PS1_Music_Apply_Fade).
