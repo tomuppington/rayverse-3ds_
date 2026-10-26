@@ -911,17 +911,14 @@ void INIT_VIGNET(void) {
             strcpy(text_to_display[1].text, language_txt[31]); // /to grow plants use the $ button/
             strcpy(text_to_display[2].text, language_txt[32]); // (empty string)
             strcpy(text_to_display[3].text, language_txt[33]); // (empty string)
-            Deter_Option_Caract(text_to_display[1].text, options_jeu.action, 255);
-            Deter_Option_Caract(text_to_display[2].text, options_jeu.action, 255);
-            Deter_Option_Caract(text_to_display[3].text, options_jeu.action, 255);
+            ctr_name_button('a', 0, 3); // (3DS: A plants seeds, like running: the action button)
         } break;
         case 3: {
             strcpy(text_to_display[0].text, language_txt[34]); // /the musician gives rayman/
             strcpy(text_to_display[1].text, language_txt[35]); // /a super helicopter power/
             strcpy(text_to_display[2].text, language_txt[36]); // /press the $ button to use it/
             strcpy(text_to_display[3].text, language_txt[37]); // /press $ again to go higher/
-            Deter_Option_Caract(text_to_display[2].text, options_jeu.jump, 255);
-            Deter_Option_Caract(text_to_display[3].text, options_jeu.jump, 255);
+            ctr_name_button('b', 0, 3); // (3DS: B)
         } break;
         case 4: {
             start_cd_suspence();

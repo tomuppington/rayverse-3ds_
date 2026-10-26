@@ -107,7 +107,8 @@ static const ctr_keymap_t ctr_keymap[] = {
     { KEY_B,      SC_CONTROL },  // jump   (default PC key: Ctrl)
     { KEY_Y,      SC_ALT },      // punch  (default PC key: Alt)
     { KEY_X,      SC_X },        // action (default PC key: X)
-    { KEY_A,      SC_ENTER },    // confirm in menus
+    { KEY_A,      SC_ENTER },    // confirm in menus (in menus only, see ctr_process_input)
+    { KEY_A,      SC_X },        // in levels: action too - run, plant seeds (see ctr_process_input)
     { KEY_START,  SC_ESCAPE },   // game menu / back
     { KEY_SELECT, SC_NUMLOCK },  // pause
 };
@@ -132,8 +133,13 @@ static void ctr_process_input(void) {
     if (assist.hide_direction) effective &= ~(KEY_LEFT | KEY_RIGHT);
     if (assist.add_jump) effective |= KEY_B;
 
+    // A: action (run) while playing a level, confirm everywhere else (menus, the pause menu).
+    bool playing = RaymanDansUneMapDuJeu && !bottom_menu_active();
     for (u32 i = 0; i < COUNT(ctr_keymap); ++i) {
         bool is_down = (effective & ctr_keymap[i].buttons) != 0;
+        if (ctr_keymap[i].buttons == KEY_A) {
+            is_down = is_down && (ctr_keymap[i].scancode == SC_X ? playing : !playing);
+        }
         if (is_down != ctr_key_was_down[i]) {
             ctr_key_was_down[i] = is_down;
             u8 dos_scancode = ctr_keymap[i].scancode;
@@ -798,7 +804,7 @@ int main(int argc, char** argv) {
 
     printf("Rayverse for 3DS (work in progress)\n");
     printf("Rayman 1 PC port - bring your own data\n\n");
-    printf("Controls: B jump, Y punch, X action,\nDown+Left/Right crawl, A confirm,\nSTART menu, SELECT pause.\n");
+    printf("Controls: B jump, Y punch, A run/action,\nDown+Left/Right crawl, A confirm,\nSTART menu, SELECT pause.\n");
     printf("Hold L+R+SELECT to quit.\n");
     printf("Tap the touch screen to change the\npicture size. Slide the 3D slider up\nfor 3D.\n\n");
 

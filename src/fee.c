@@ -63,7 +63,7 @@ void init_fee(void) {
             strcpy(text_to_display[7].text, language_txt[51]); // /press the $ button to punch/
             strcpy(text_to_display[8].text, language_txt[52]); // /the longer you press/
             strcpy(text_to_display[9].text, language_txt[53]); // /the further you punch/
-            Deter_Option_Caract(text_to_display[7].text, options_jeu.fist, 255);
+            ctr_name_button('y', 0, 9); // (3DS: Y punches)
         } else if (num_level == 8) {
             is_fee = 1;
             strcpy(text_to_display[0].text, language_txt[54]); // /you're courageous rayman/
@@ -88,7 +88,7 @@ void init_fee(void) {
             strcpy(text_to_display[7].text, language_txt[71]); // (empty string)
             strcpy(text_to_display[8].text, language_txt[72]); // /to grab use the $ button/
             strcpy(text_to_display[9].text, language_txt[73]); // (empty string)
-            Deter_Option_Caract(text_to_display[7].text, options_jeu.fist, 255);
+            ctr_name_button('y', 0, 9); // (3DS: grabbing is punching, Y)
         }
     } else if (num_world == 2) {
         if (num_level == 11) {
@@ -103,7 +103,7 @@ void init_fee(void) {
             strcpy(text_to_display[7].text, language_txt[81]); // /now you can use your hair/
             strcpy(text_to_display[8].text, language_txt[82]); // /as a helicopter/
             strcpy(text_to_display[9].text, language_txt[83]); // /to do it press $ twice/
-            Deter_Option_Caract(text_to_display[7].text, options_jeu.jump, 255);
+            ctr_name_button('b', 0, 9); // (3DS: B jumps, twice for the helicopter)
         }
     } else if (num_world == 3) {
         if (num_level == 11) {
@@ -118,7 +118,7 @@ void init_fee(void) {
             strcpy(text_to_display[7].text, language_txt[91]); // /to run press $ while walking/
             strcpy(text_to_display[8].text, language_txt[92]); // (empty string)
             strcpy(text_to_display[9].text, language_txt[93]); // (empty string)
-            Deter_Option_Caract(text_to_display[7].text, options_jeu.action, 255);
+            ctr_name_button('a', 0, 9); // (3DS: A runs)
         }
     }
     if (is_fee) {

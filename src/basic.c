@@ -1357,6 +1357,17 @@ void Deter_Option_Caract(char* text, s16 key, s16 offset) {
     }
 }
 
+// 3DS port: the 3DS button for every '$' in the texts shown (lines first..last of text_to_display). The
+// PC version wrote its joystick button letter (a to d, see Deter_Option_Caract), and only in the one line
+// it was given, so some lines (grab, helicopter) still showed the '$'.
+void ctr_name_button(char button, s32 first, s32 last) {
+    for (s32 line = first; line <= last; ++line) {
+        for (char* c = text_to_display[line].text; *c; ++c) {
+            if (*c == '$') *c = button;
+        }
+    }
+}
+
 //1F50C
 void SwapAB(s16* a, s16* b) {
     s16 temp = *a;
