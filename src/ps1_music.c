@@ -283,7 +283,7 @@ void ps1_music_init(void) {
     printf("Music: %s\n", ps1_music_enabled ? "PlayStation soundtrack (MusicPS1 folder)" : "PC CD soundtrack");
 }
 
-#define PS1_AMBIENCE_GAIN_256 154 // (0.6)
+#define PS1_AMBIENCE_GAIN_256 192 // (0.75)
 static bool ps1_open_track(s32 index, bool excerpt, bool fade_in) {
     stop_ogg(&ogg_cd_track);
     if (index < 0 || index >= (s32)COUNT(ps1_track_names)) return false;
@@ -304,7 +304,7 @@ static bool ps1_open_track(s32 index, bool excerpt, bool fade_in) {
     result.ps1 = true;
     result.samples_left = -1;
     // The ambience tracks (birds, crickets, ...: JUN_AMB etc.) are recorded about as loud as the music;
-    // played at full volume they drowned out the sound effects. They are played quieter (about -4.5 dB).
+    // played at full volume they drowned out the sound effects. They are played a quarter quieter (about -2.5 dB).
     if (strstr(ps1_track_names[index], "_AMB")) {
         result.gain_256 = PS1_AMBIENCE_GAIN_256;
     }
