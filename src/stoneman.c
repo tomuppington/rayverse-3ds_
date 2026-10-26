@@ -244,7 +244,7 @@ void DO_STONEWOMAN_COMMAND(obj_t* obj) {
             if (
                     !((
                               !(block_flags[calc_typ_travd(obj, 0)] >> BLOCK_FULLY_SOLID & 1) &&
-                              obj->x + obj->offset_bx >= 32 && obj->x + obj->offset_bx <= xmapmax + 268
+                              obj->x + obj->offset_bx >= 32 && obj->x + obj->offset_bx <= xmapmax + Bloc_lim_W2 - 52 /* 3DS port: 268 = 320 - 52 */
                       ) || obj->main_etat == 2)
                     )
             {

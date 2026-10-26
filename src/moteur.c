@@ -1480,7 +1480,7 @@ void MOVE_OBJECT(obj_t* obj) {
                 s32 x2 = x1 + dx;
                 s32 y = obj->y + obj->offset_by - 8;
                 if ((!(block_flags[BTYP(x1 >> 4, y >> 4)] & 0x10) && (block_flags[BTYP(x2 >> 4, y >> 4)] & 0x10)) ||
-                        x2 < 0 || (x2 > xmapmax + SCREEN_WIDTH - 16)) {
+                        x2 < 0 || (x2 > xmapmax + Bloc_lim_W2 - 16)) { /* 3DS port: the play window's right edge (Bloc_lim_W2), not the screen's (4:3 window) */
                     dx = -dx;
                     obj->speed_x = -obj->speed_x;
                 }

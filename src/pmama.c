@@ -576,7 +576,7 @@ void lance_couteau_lineaire(obj_t* in_obj) {
                 cout_obj = &level.objects[CouteauxInfos[cout_ind].id];
                 cout_x = cout_obj->x + cout_obj->offset_bx;
                 cout_y = cout_obj->y + cout_obj->offset_by;
-                if (cout_x < -20 || (cout_x > xmapmax + (SCREEN_WIDTH + 20)) ||
+                if (cout_x < -20 || (cout_x > xmapmax + (Bloc_lim_W2 + 20)) ||
                     cout_y < -20 || (cout_y > ymapmax + (SCREEN_HEIGHT + 20))
                 ) {
                     CouteauxInfos[cout_ind].active = true;

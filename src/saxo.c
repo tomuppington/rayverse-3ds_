@@ -711,7 +711,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
             }
 
             if (obj->main_etat == 0) {
-                if (!(obj->flags.flip_x) ? obj->x + obj->offset_bx < 0 : obj->x + obj->offset_bx > xmapmax + SCREEN_WIDTH) {
+                if (!(obj->flags.flip_x) ? obj->x + obj->offset_bx < 0 : obj->x + obj->offset_bx > xmapmax + Bloc_lim_W2) { /* 3DS port: the play window's right edge (Bloc_lim_W2), not the screen's (4:3 window) */
                     obj->speed_x = 0;
                 }
 
@@ -746,7 +746,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
                 if (
                         !(obj->flags.flip_x) ?
                         (obj->x + 0x40) < 0 :
-                        (obj->x + 0xC0) > (xmapmax + 0x140)
+                        (obj->x + 0xC0) > (xmapmax + Bloc_lim_W2)
                         )
                 {
                     obj->flags.flip_x = 1 - obj->flags.flip_x;
@@ -769,7 +769,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
                 if (
                         !(obj->flags.flip_x) ?
                         obj->x + obj->offset_bx < 0 :
-                        obj->x + obj->offset_bx > xmapmax + SCREEN_WIDTH
+                        obj->x + obj->offset_bx > xmapmax + Bloc_lim_W2
                         )
                     obj->speed_x = 0;
 
@@ -820,7 +820,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
                 if (
                         !(obj->flags.flip_x) ?
                         obj->x + obj->offset_bx < 0 :
-                        obj->x + obj->offset_bx > xmapmax + SCREEN_WIDTH
+                        obj->x + obj->offset_bx > xmapmax + Bloc_lim_W2
                         )
                     obj->speed_x = 0;
 
@@ -904,7 +904,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
                             }
                             goto block_147;
                         block_145:
-                            if ((obj->x + 0xC0) > (xmapmax + 0x140))
+                            if ((obj->x + 0xC0) > (xmapmax + Bloc_lim_W2))
                             {
                                 goto block_155;
                             }
@@ -926,7 +926,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
                 if (
                         !(obj->flags.flip_x) ?
                         (obj->x + 0x40) < 0 :
-                        (obj->x + 0xC0) > (xmapmax + 0x140)
+                        (obj->x + 0xC0) > (xmapmax + Bloc_lim_W2)
                         )
                 {
                     block_155:
@@ -948,7 +948,7 @@ void DO_SAXO_COMMAND(obj_t* obj) {
     }
 
     temp_v1_9 = obj->x + obj->offset_bx + obj->speed_x;
-    if ((temp_v1_9 < 0) || ((xmapmax + 303) < temp_v1_9)) // NOTE: 319 changed to 303 in PC version
+    if ((temp_v1_9 < 0) || ((xmapmax + Bloc_lim_W2 - 17) < temp_v1_9)) // NOTE: 319 changed to 303 in PC version (3DS port: 320 - 17 = the play window's width - 17, for the 4:3 window)
     {
         obj->speed_x = 0;
     }
@@ -1143,7 +1143,7 @@ void DO_SAXO2_COMMAND(obj_t* obj) {
             }
     }
     next_x = obj->x + obj->offset_bx + obj->speed_x;
-    if (next_x < 0 || (xmapmax + SCREEN_WIDTH - 1) < next_x)
+    if (next_x < 0 || (xmapmax + Bloc_lim_W2 - 1) < next_x)
         obj->speed_x = 0;
 }
 
