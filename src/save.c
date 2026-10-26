@@ -573,8 +573,12 @@ void SaveGameOnDisk(u8 which_save) {
     mem_write(&poing, raw, 20);
     mem_write(&status_bar, raw, 10);
     mem_write(&ray.hit_points, raw, 1);
-    mem_write(collected_events_data, raw, 2592);
-    mem_write(bonus_completed_data, raw, 24);
+    // Fix (3DS port): the broken cages / collected items of every level (save_zone) and the completed
+    // bonus levels (bonus_perfect), which LoadGameOnDisk() reads back. These two arrays were written in
+    // their place but never filled in, so the save file didn't keep them: after loading a save, cages
+    // already broken were back.
+    mem_write(save_zone, raw, 2592);
+    mem_write(bonus_perfect, raw, 24);
     u16 map_location = dans_la_map_monde ? num_world_choice : world_index;
     // Note: Game bug: saved_map_location is only 1 byte, but we are writing/reading 2 bytes,
     mem_write(&map_location, raw, 2);
