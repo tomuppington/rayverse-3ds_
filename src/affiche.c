@@ -513,7 +513,10 @@ void DISPLAY_ALL_OBJECTS(void) {
             for (s32 j = 0; j < nb_cymbal_in_map; ++j) {
                 obj_t* cymbale = level.objects + cymbal_obj_id[j];
                 if (cymbale->is_active) {
-                    DISPLAY_CYMBALE(cymbale, draw_buffer, 1);
+                    // Fix (3DS port): the second pass draws the cymbal's other half (layers 3-5), as in the
+                    // PS1 code (DISPLAY_CYMBALE(obj, false)); it drew the first half again, so the top half
+                    // was missing.
+                    DISPLAY_CYMBALE(cymbale, draw_buffer, 0);
                 }
             }
         }
