@@ -789,6 +789,10 @@ int main(int argc, char** argv) {
     consoleSetWindow(&ctr_console, 0, 0, 40, 26);
     consoleSetWindow(&ctr_stats_console, 0, 26, 40, 4);
     consoleSelect(&ctr_console);
+    // The start-up messages go to the off-screen copy (see ctr_console_hide), and the bottom screen stays
+    // black until the game draws its first picture; they're shown only if something is wrong.
+    memset(gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL), 0, 320 * 240 * 2);
+    ctr_console_hide(true);
     osSetSpeedupEnable(true); // use the New 3DS's faster CPU mode (harmless on older models)
     atexit(ctr_shutdown);     // registered first, so it runs last (after the game's own cleanup)
 
@@ -799,6 +803,7 @@ int main(int argc, char** argv) {
     printf("Tap the touch screen to change the\npicture size. Slide the 3D slider up\nfor 3D.\n\n");
 
     if (!ctr_check_game_data()) {
+        ctr_console_hide(false); // (show what's missing)
         ctr_wait_for_start();
         return 0;
     }
