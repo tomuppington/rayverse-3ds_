@@ -22,7 +22,7 @@ void start_cd_ubi_soft(void) {
 //optimized out
 void start_cd_gagne(void) {
     //nullsub (PC). PS1 soundtrack: level-complete fanfare.
-    if (ps1_music_enabled) ps1_play_music(0, 0);
+    if (ps1_music_enabled) ps1_music_level_won(); // (after the boss jingle, if it's playing)
 }
 
 //optimized out
