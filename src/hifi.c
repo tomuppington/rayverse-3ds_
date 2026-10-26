@@ -126,6 +126,7 @@ void LoadBnkFixe(void) {
         LoadTchatchPerdu();
     }
     LoadBnkFile(2, 2, bnkHeaderFixe, &bnkDataFixe);
+    ps1_sfx_load_fixed(); // 3DS port: PS1 sound effects, if there (ps1_sfx.c)
 }
 
 //3EA00
@@ -151,6 +152,7 @@ void LoadBnkWorld(s16 world) {
         } break;
         default: break;
     }
+    ps1_sfx_load_world(world); // 3DS port: PS1 sound effects, if there (ps1_sfx.c)
 }
 
 // Set by the caller just before KeyOn(): whether the sample may use its loop points. The sound banks
@@ -177,8 +179,21 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
     // fist); with looping sounds the orphaned voice would never be stopped. Starting nothing instead
     // keeps the original voice tracked, and is otherwise inaudible either way.
     if (volume == 0) {
+        keyon_snd = -1;
         return -1;
     }
+    // 3DS port: the PS1 recording, if there is one (ps1_sfx.c).
+    if (ps1_sfx_setup(&snd, bank, prog, tone, note, volume, pan, loop_allowed)) {
+        keyon_snd = -1;
+        s16 voice_index = play_digi_snd(&snd);
+        if (voice_index >= 0 && voice_index < COUNT(voice_table)) {
+            voice_table[voice_index].obj = -2;
+            voice_table[voice_index].snd = -1;
+            voice_is_working[voice_index] = 0;
+        }
+        return voice_index;
+    }
+    keyon_snd = -1;
     bnk_header_t* loop_header = (bank == 1) ? bnkHeaderWorld + prog : bnkHeaderFixe + prog;
     // field_8 / field_C of the bank header are the loop start and the loop length (0, 0 for one-shot
     // samples). (Almost all loops start at 0, where length and end are the same; the one that doesn't, the
@@ -225,6 +240,11 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
 void KeyOff(u32 voice_id, u8 bank, u8 prog, u8 tone, u8 note) {
     if (voice_id >= COUNT(digi_voices)) return; // added: guard against invalid voice ids
     snd_t* digi_voice = digi_voices + voice_id;
+    if (digi_voice->ps1_pan && digi_voice->is_playing) {
+        // PS1 sound: fades out quickly (as the PS1 sound chip releases a note) rather than cutting off.
+        if (digi_voice->release_left == 0) digi_voice->release_left = 882; // 20 ms
+        return;
+    }
     digi_voice->is_playing = false;
 }
 
@@ -232,6 +252,12 @@ void KeyOff(u32 voice_id, u8 bank, u8 prog, u8 tone, u8 note) {
 void KeyVol(s32 voice_id, s32 volume, s32 pan) {
     if (voice_id < 0 || voice_id >= COUNT(digi_voices)) return; // added: guard against invalid voice ids
     snd_t* digi_voice = digi_voices + voice_id;
+    if (digi_voice->ps1_pan) {
+        digi_voice->volume = (float)volume / 127.0f * digi_voice->ps1_gain;
+        digi_voice->pan_l = (float)snd_sqrt_table[127 - (pan & 127)] / 256.0f;
+        digi_voice->pan_r = (float)snd_sqrt_table[pan & 127] / 256.0f;
+        return;
+    }
     digi_voice->volume = MIN(1.0f, (float)volume / 50.0f);
 }
 

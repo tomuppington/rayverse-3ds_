@@ -146,6 +146,7 @@ typedef int GLint;
 #include "rand.c"
 #include "ray.c"
 #include "sound.c"
+#include "ps1_sfx.c" // added: PS1 sound effects (3DS port)
 #include "save.c"
 #include "saxo.c"
 #include "screen.c"

@@ -85,6 +85,11 @@ typedef struct snd_t {
     s32 sample_rate;
     u8 bytes_per_sample;
     u8 is_playing;
+    // 3DS port: PS1 sound effects (ps1_sfx.c)
+    u8 ps1_pan;      // placed left/right with pan_l / pan_r (otherwise the same on both sides)
+    float pan_l, pan_r;
+    float ps1_gain;  // the recording's own volume settings (volume = game volume / 127 * ps1_gain)
+    s32 release_left; // > 0: fading out after KeyOff (samples left)
 } snd_t;
 
 typedef struct pile_snd_t {

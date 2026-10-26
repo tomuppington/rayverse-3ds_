@@ -312,33 +312,41 @@ void game_get_sound_samples(game_sound_buffer_t* output_buffer) {
 
             // 2. Get samples for interpolation
             // Convert 8-bit unsigned samples to a signed range (-128 to 127)
-            s32 s1, s2;
+            // (16-bit samples: voice clips from SNDVIG.DAT and the PS1 sounds; 8-bit: the PC sounds, scaled to 16 bits)
+            float s1, s2;
             if (voice->bytes_per_sample == 2) {
-                // 16-bit signed samples (voice clips from SNDVIG.DAT), scaled to the 8-bit range used below
                 const s16* data16 = (const s16*)voice->data;
-                s1 = data16[source_index] / 256;
-                s2 = data16[source_index + 1] / 256;
+                s1 = (float)data16[source_index];
+                s2 = (float)data16[source_index + 1];
             } else {
-                s1 = (s32)voice->data[source_index] - 128;
-                s2 = (s32)voice->data[source_index + 1] - 128;
+                s1 = (float)((s32)voice->data[source_index] - 128) * 256.0f;
+                s2 = (float)((s32)voice->data[source_index + 1] - 128) * 256.0f;
             }
 
             // 3. Perform Linear Interpolation
             // Find the fractional part of our position, which is our interpolation factor 't'
             float t = voice->position - (float)source_index;
 
-            // Interpolate between the two samples
-            float interpolated_sample = (1.0f - t) * (float)s1 + t * (float)s2;
+            // Interpolate between the two samples, and apply the volume for this voice
+            float sample = ((1.0f - t) * s1 + t * s2) * voice->volume;
+            if (voice->release_left > 0) {
+                // (PS1 sound after KeyOff: fading out)
+                sample *= (float)voice->release_left / 882.0f;
+                if (--voice->release_left == 0) {
+                    voice->is_playing = false;
+                    break;
+                }
+            }
 
-            // 4. Scale to 16-bit and apply volume
-            // Scale from the -128 to 127 range to the -32768 to 32767 range
-            // Also, apply the volume for this voice
-            s32 dest_sample = (s32)(interpolated_sample * 256.0f * voice->volume);
-
-            // 5. Mix into the output buffer (mono to stereo)
-            // Add the new sample to the existing data in the buffer
-            s32 mixed_l = dest[0] + dest_sample;
-            s32 mixed_r = dest[1] + dest_sample;
+            // 5. Mix into the output buffer (mono to stereo; PS1 sounds are placed left/right)
+            s32 mixed_l, mixed_r;
+            if (voice->ps1_pan) {
+                mixed_l = dest[0] + (s32)(sample * voice->pan_l);
+                mixed_r = dest[1] + (s32)(sample * voice->pan_r);
+            } else {
+                mixed_l = dest[0] + (s32)sample;
+                mixed_r = dest[1] + (s32)sample;
+            }
 
             // Clamp the values to prevent 16-bit integer overflow (clipping)
             dest[0] = (s16)MIN(32767, MAX(-32768, mixed_l));
@@ -772,6 +780,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
             if (frame_snd[snd] == 0) {
                 // NOTE: the PS1 version implements left/right directional sound here, using SsUtKeyOn
                 keyon_loop_allowed = (sound_table[snd] & 0x10) != 0;
+                keyon_snd = snd;
                 s32 voice_id = has_sample ? KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd) : -1;
                 if (voice_id != -1) {
                     erase_voice_table(obj_id);
@@ -787,6 +796,7 @@ void PlaySnd(s16 snd, s16 obj_id) {
                 // NOTE: I don't yet know what causes the sound to be emitted in this code path.
                 // So, I added this for now (delete again when it's figured out).
                 keyon_loop_allowed = (sound_table[snd] & 0x10) != 0;
+                keyon_snd = snd;
                 s32 delayed_voice_id = has_sample ? KeyOn(bank_to_use[snd], prog, tone, note, Volume_Snd * vol_snd * hard_sound_table[snd].volume >> 14, pan_snd) : -1;
                 // Fix (3DS port): record this voice like the path above (the PS1 does so when it plays a
                 // delayed sound), so the sound can be interrupted and manage_snd() can stop it. Untracked,
@@ -862,6 +872,7 @@ void PlaySnd_old(s16 sound_id) {
         u8 prog = hard_sound_table[sound_id].prog;
         if (prog != 255) {
             keyon_loop_allowed = (sound_table[sound_id] & 0x10) != 0;
+            keyon_snd = sound_id;
             voice_index = KeyOn(bank_to_use[sound_id], prog,
                                 hard_sound_table[sound_id].tone,
                                 hard_sound_table[sound_id].note,
