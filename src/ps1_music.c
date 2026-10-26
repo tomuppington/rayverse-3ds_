@@ -35,7 +35,7 @@ static const ps1_music_cmd_t ps1_level_music[7][22][4] = {
         {{0x01, 29}, {0x03, 0}, {0x00, 0}, {0x00, 0}}, // 8
         {{0x01, 29}, {0x03, 0}, {0x00, 0}, {0x00, 0}}, // 9
         {{0x01, 38}, {0x03, 0}, {0x00, 0}, {0x00, 0}}, // 10
-        {{0x01, 53}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 11 (3DS port: boss beaten, BOSSWIN - see below)
+        {{0x01, 53}, {0x01, 54}, {0x03, 1}, {0x00, 0}}, // 11 (3DS port: boss beaten: BOSSWIN, then BOSSLOOP over and over - see below)
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 12
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 13
         {{0x00, 0}, {0x00, 0}, {0x00, 0}, {0x00, 0}}, // 14
@@ -193,7 +193,7 @@ static const ps1_music_cmd_t ps1_level_music[7][22][4] = {
     },
 };
 
-static const char* ps1_track_names[54] = {
+static const char* ps1_track_names[55] = {
     "FEE",
     "SUSPENC",
     "RAP",
@@ -247,10 +247,13 @@ static const char* ps1_track_names[54] = {
     "DRUMS",
     "MR_SAX",
     "GROTTE2",
-    // 3DS port: not a CD track. The PS1 plays its boss victory jingle from its own synthesised music
-    // (sequence 3 of RAY\SND\BIGFIX.ALL, with the instruments of SEPFIX.VB); converted from the player's
-    // disc into MusicPS1/BOSSWIN.ogg like the other tracks.
-    "BOSSWIN"
+    // 3DS port: not CD tracks. The PS1 plays its boss victory jingle from its own synthesised music
+    // (sequence 3 of RAY\SND\BIGFIX.ALL, with the instruments of SEPFIX.VB, through the SPU reverb),
+    // repeating it until other music starts (SsSepPlay with a loop count of 0). Converted from the
+    // player's disc into MusicPS1 like the other tracks: the first time through, then the rest of the
+    // repeats (with the last chord and the reverb carrying over into the start).
+    "BOSSWIN",
+    "BOSSLOOP"
 };
 
 static const s32 ps1_excerpt_offsets[4] = {300, 900, 600, 1200}; // in CD sectors (1/75 s), from the PS1 code
@@ -369,7 +372,6 @@ void music_select_ps1(bool ps1) {
 // Start the music for a world/level (world 0 = special music, see the table).
 static s32 ps1_victory_delay = -1;  // frames until the fanfare, or -1
 static bool ps1_victory_played;    // (once per level)
-static bool ps1_gagne_after_jingle; // (the level-won fanfare is waiting for the boss jingle to finish)
 
 void ps1_play_music(s16 world, s16 level) {
     if (world < 0 || world >= 7 || level < 0 || level >= 22) return;
@@ -380,7 +382,6 @@ void ps1_play_music(s16 world, s16 level) {
         ps1_scroll_locked_audio = false; // (level music: a new start. Not for the jingles, see below.)
         ps1_victory_delay = -1;
         ps1_victory_played = false;
-        ps1_gagne_after_jingle = false;
         ps1_seed_audio = false;
         ps1_level_music_after_jingle = false;
         ps1_death_music_armed = true;
@@ -389,23 +390,13 @@ void ps1_play_music(s16 world, s16 level) {
     ps1_music_run();
 }
 
-// 3DS port: the level-won fanfare asked for while the boss victory jingle plays waits for it to finish
-// (on the PS1 the two can overlap: one is synthesised, the other from the CD). See ps1_gagne_after_jingle.
+// The level-won fanfare (start_cd_gagne).
 void ps1_music_level_won(void) {
-    if (ps1_music_world == 0 && ps1_music_level == 11 && is_ogg_playing && ogg_cd_track.decoder) {
-        ps1_gagne_after_jingle = true;
-    } else {
-        ps1_play_music(0, 0);
-    }
+    ps1_play_music(0, 0); // (the boss jingle repeats until other music starts, as on the PS1)
 }
 
 // Called by play_ogg() when the current track or excerpt has finished.
 bool ps1_music_next_segment(void) {
-    if (ps1_gagne_after_jingle && ps1_music_world == 0 && ps1_music_level == 11) {
-        ps1_gagne_after_jingle = false;
-        ps1_play_music(0, 0);
-        return is_ogg_playing;
-    }
     if (ps1_level_music_after_jingle && ps1_music_world == 0 && ps1_music_level == 1) {
         // The death jingle has finished and Rayman is already back in the level.
         ps1_level_music_after_jingle = false;
@@ -462,8 +453,8 @@ void ps1_music_boss_beaten(void) {
 // for it (3DS port), instead of cutting it off when Rayman's victory dance ends.
 bool ps1_victory_jingle_playing(void) {
     if (!ps1_music_enabled) return false;
-    if (ps1_victory_delay > 0 || ps1_gagne_after_jingle) return true;
-    return ps1_music_world == 0 && (ps1_music_level == 0 || ps1_music_level == 11) && is_ogg_playing && ogg_cd_track.decoder;
+    if (ps1_victory_delay > 0) return true;
+    return ps1_music_world == 0 && ps1_music_level == 0 && is_ogg_playing && ogg_cd_track.decoder; // (the level-won fanfare; the boss jingle repeats)
 }
 
 // Boss beaten: the PS1 fades the music out over 90 frames (FUN_80131e40 / PS1_Music_Apply_Fade).
@@ -480,7 +471,7 @@ void ps1_music_update_in_level(bool rayman_dying) {
     if (ps1_victory_delay > 0 && --ps1_victory_delay == 0) {
         ps1_victory_delay = -1;
         // The PS1's boss victory jingle (MusicPS1/BOSSWIN.ogg); if it isn't there, the level-won fanfare.
-        FILE* jingle = fopen("MusicPS1/BOSSWIN.ogg", "rb");
+        FILE* jingle = fopen("MusicPS1/BOSSWIN.ogg", "rb"); // (and BOSSLOOP.ogg)
         if (jingle) fclose(jingle);
         ps1_play_music(0, jingle ? 11 : 0);
         return;
