@@ -73,6 +73,16 @@ void calc_bande_scroll_y(s16 height) {
         Val_Div_Scroll_Y = 2;
     }
     Val_Add_Scroll_Y = height - screen_h - (16 * mp.height - screen_h) / Val_Div_Scroll_Y - 1;
+    if (height <= screen_h) {
+        // Fix (3DS port): a background no taller than the screen (e.g. 229 rows for a 240-row screen; on the
+        // 200-row PC screen they were all taller) can't scroll up and down. The formula above made it scroll
+        // at half the camera's speed, so in tall levels (e.g. the bonus level in Moskito's Nest) it soon slid
+        // off the screen entirely, and with nothing drawn behind them, everything moving left trails. It now
+        // stays put, its bottom at the bottom of the screen (the rows above it are filled, see
+        // Display_Back_Screen).
+        Val_Div_Scroll_Y = 0x7FFF;
+        Val_Add_Scroll_Y = height - screen_h - 1;
+    }
 }
 
 //778F0
