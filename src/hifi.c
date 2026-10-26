@@ -180,10 +180,13 @@ s16 KeyOn(u8 bank, u8 prog, u8 tone, u8 note, u8 volume, u8 pan) {
         return -1;
     }
     bnk_header_t* loop_header = (bank == 1) ? bnkHeaderWorld + prog : bnkHeaderFixe + prog;
-    // field_8 / field_C of the bank header are the loop start / end (0, 0 for one-shot samples).
-    if (loop_allowed && loop_header->field_C > loop_header->field_8 && loop_header->field_C <= loop_header->size) {
+    // field_8 / field_C of the bank header are the loop start and the loop length (0, 0 for one-shot
+    // samples). (Almost all loops start at 0, where length and end are the same; the one that doesn't, the
+    // whoosh of the flying picks and other flying things, loops the whole rest of the sample, as on the
+    // PS1 - read as an end, it looped a tiny piece over and over, which buzzed.)
+    if (loop_allowed && loop_header->field_C > 0 && loop_header->field_8 + loop_header->field_C <= loop_header->size) {
         snd.loop_start = loop_header->field_8;
-        snd.loop_end = loop_header->field_C;
+        snd.loop_end = loop_header->field_8 + loop_header->field_C;
     }
     if (bank == 1) {
         bnk_header_t* bnk_header = bnkHeaderWorld + prog;
