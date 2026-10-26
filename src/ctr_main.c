@@ -466,6 +466,7 @@ static bool ctr_saved_eyes_valid;
 static bool ctr_bottom_menu_shown;
 
 static u32 ctr_bottom_picture[320 * 240];
+static bool ctr_skip_swap; // (set by ctr_present: show the same pictures again this frame)
 
 static void ctr_draw_bottom_picture(void);
 
@@ -587,6 +588,31 @@ static void ctr_present(app_state_t* app_state) {
     bool map_dialog_held = menu_held && menu_rays_held_on_map();
     bool title_menu_held = menu_held && !map_dialog_held;
 
+    // Going from one menu to the next, the game sometimes shows a blank (black) frame or two in between
+    // (e.g. title menu -> save select). Both screens keep showing the last menu picture meanwhile, rather
+    // than flashing to black on top and to the rays (or the text console) below. At most a few frames,
+    // so a real fade to black still shows.
+    static s32 ctr_menu_gap_frames;
+    static bool ctr_last_frame_menu;
+    bool any_menu = title_menu || title_menu_held || map_dialog || map_dialog_held;
+    if (!any_menu && !menu_below && !RaymanDansUneMapDuJeu && ctr_last_frame_menu && ctr_menu_gap_frames < 6) {
+        u32 lit = 0;
+        const rgb_t* gp = game->draw_palette.colors;
+        for (s32 i = 0; i < src_w * src_h; i += 7) {
+            rgb_t c = gp[src[i]];
+            lit += (c.r + c.g + c.b) > 30;
+        }
+        if (lit < (u32)(src_w * src_h / 7) / 50) { // (almost all black)
+            ++ctr_menu_gap_frames;
+            ctr_skip_swap = true; // (the screens keep what they show)
+            stereo_end_frame();
+            menu_rays_background = NULL;
+            return;
+        }
+    }
+    ctr_menu_gap_frames = 0;
+    ctr_last_frame_menu = any_menu;
+
     if (map_dialog || map_dialog_held) {
         if (map_dialog) {
             menu_rays_render(NULL, NULL, ctr_bottom_picture, src, src_w, src_h, game->draw_palette.colors, 0.0f);
@@ -681,8 +707,12 @@ void ctr_advance_frame(app_state_t* app_state) {
     present_ns_total += get_clock() - present_start;
     ctr_produce_sound_for_frame(app_state, &app_state->game.sound_buffer);
 
-    gfxFlushBuffers();
-    gfxSwapBuffers();
+    if (ctr_skip_swap) {
+        ctr_skip_swap = false;
+    } else {
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+    }
 
     // Speed readout on the bottom screen, updated once a second: frames per second, how much of
     // each frame's time budget the console is using, and how often the sound queue ran dry.
