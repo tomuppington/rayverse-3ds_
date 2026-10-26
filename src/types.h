@@ -158,6 +158,7 @@ typedef struct ogg_t {
     s32 fade_pos;
     s32 fade_out_total; // fading out over this many samples (0: not fading out)
     s32 fade_out_left;  // samples left until silence; the track then stops
+    s32 gain_256;       // 3DS port: volume of this track in 1/256ths (0: full volume)
 } ogg_t;
 
 

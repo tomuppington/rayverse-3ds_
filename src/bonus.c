@@ -138,6 +138,17 @@ void DO_PERFECT_BONUS_MAP(void) {
                 is_mode_x = true;
                 InitModeNormalWithFrequency(VGA_FREQ);
             }
+            // 3DS port: the "perfect" picture is 320x200: show it at the original picture size (as
+            // DISPLAY_GAME_VIGNET does), then go back to the level's picture size and play window.
+            s32 level_w = screen_width, level_h = screen_height;
+            bool level_boxed = play_window_boxed;
+            s32 level_W1 = Bloc_lim_W1, level_W2 = Bloc_lim_W2, level_H1 = Bloc_lim_H1, level_H2 = Bloc_lim_H2;
+            s32 clip_xmin, clip_xmax, clip_ymin, clip_ymax;
+            get_sprite_clipping(&clip_xmin, &clip_xmax, &clip_ymin, &clip_ymax);
+            play_window_boxed = false;
+            screen_width = SCREEN_WIDTH_ORIGINAL;
+            screen_height = SCREEN_HEIGHT_ORIGINAL;
+            sprite_clipping(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT);
             init_memory(&main_mem_tmp, 64000);
             if (get_bonus_map_complete(num_world, num_level)) {
                 LOAD_PERFTIME_SCREEN(main_mem_tmp);
@@ -165,6 +176,14 @@ void DO_PERFECT_BONUS_MAP(void) {
             EFFACE_VIDEO();
             RESTORE_PALETTE();
             free(main_mem_tmp);
+            screen_width = level_w;
+            screen_height = level_h;
+            play_window_boxed = level_boxed;
+            Bloc_lim_W1 = level_W1;
+            Bloc_lim_W2 = level_W2;
+            Bloc_lim_H1 = level_H1;
+            Bloc_lim_H2 = level_H2;
+            sprite_clipping(clip_xmin, clip_xmax, clip_ymin, clip_ymax);
         }
     }
 }

@@ -81,6 +81,11 @@ void play_ogg(game_sound_buffer_t* sound_buffer, ogg_t* ogg) {
 		if (want > 0) {
 			got = stb_vorbis_get_samples_short_interleaved(ogg->decoder, 2, out + done * 2, want * 2);
 		}
+		if (ogg->gain_256 > 0) {
+			for (s32 i = 0; i < got * 2; ++i) {
+				out[done * 2 + i] = (s16)(((s32)out[done * 2 + i] * ogg->gain_256) >> 8);
+			}
+		}
 		if (ogg->fade_total > 0 && ogg->fade_pos < ogg->fade_total) {
 			for (s32 i = 0; i < got; ++i) {
 				s32 f = MIN(ogg->fade_pos + i, ogg->fade_total);
