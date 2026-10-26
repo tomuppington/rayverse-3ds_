@@ -9,3 +9,5 @@ LOGO.PNG
 # Caches the 3DS port writes next to the game data (made from the game's files)
 RAY3DS.MED
 RAY3DS.PAL
+SoundPS1/
+*.SFX
