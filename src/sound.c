@@ -709,6 +709,11 @@ void PlaySnd(s16 snd, s16 obj_id) {
                     prog = hard_sound_table[15].prog;
                     tone = hard_sound_table[15].tone;
                     note = hard_sound_table[15].note;
+                } else {
+                    // Fix (3DS port): Rayman clears his throat only every third time his waiting animation
+                    // asks for it (as the counter above is for). prog started as this sound's recording,
+                    // so he did it every time (about once a second while standing still).
+                    prog = -1;
                 }
                 erase_pile_snd(-1);
                 break;
@@ -719,6 +724,8 @@ void PlaySnd(s16 snd, s16 obj_id) {
                     tone = hard_sound_table[80].tone;
                     note = hard_sound_table[80].note;
                     indice_trz_wait = 0;
+                } else {
+                    prog = -1; // (likewise: every other time; see sound 15 above)
                 }
                 break;
             case 14:
