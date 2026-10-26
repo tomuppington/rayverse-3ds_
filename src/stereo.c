@@ -203,18 +203,30 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
         return;
     }
 
+    // 4:3 window (see play_window_boxed): near its edges, the shifted background and main layers must
+    // come from inside the window (not from the black sides, nor the edge of the background beyond it),
+    // and the sides stay black apart from the counters (the front layer). The fast 4-pixel loop then
+    // only covers the columns well inside the window; the sides and the few columns at the window's
+    // edges are done separately (each column once).
+    bool boxed = play_window_boxed;
+    s32 wx0 = Bloc_lim_W1, wx1 = Bloc_lim_W2;
+    s32 margin = MAX(MAX(abs(shift_back), abs(shift_main)), abs(shift_front)) + 1;
+    s32 in_lo = x_lo, in_hi = x_hi; // the columns done by the fast loop
+    if (boxed) {
+        if (wx0 < 0) wx0 = 0;
+        if (wx1 > STEREO_W) wx1 = STEREO_W;
+        in_lo = MAX(in_lo, wx0 + margin);
+        in_hi = MIN(in_hi, wx1 - margin);
+        if (in_hi < in_lo) in_hi = in_lo;
+    }
+
     for (s32 y = 0; y < STEREO_H; ++y) {
         const u8* fin  = final_frame + y * STEREO_W;
         const u8* main = stereo_layer_main + y * STEREO_W;
         const u8* back = stereo_layer_back + y * STEREO_W;
         const u8* drawn = stereo_drawn + y * STEREO_W;
         u8* dst = out + y * STEREO_W;
-        for (s32 x = 0; x < x_lo; ++x) {
-            s32 xf = stereo_clamp_x(x - shift_front);
-            s32 xm = stereo_clamp_x(x - shift_main);
-            dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
-        }
-        // Interior: the three layers read through pointers pre-offset by their shifts.
+        // The three layers read through pointers pre-offset by their shifts.
         const u8* fin_f  = fin  - shift_front;
         const u8* main_f = main - shift_front;
         const u8* main_m = main - shift_main;
@@ -222,8 +234,15 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
         const u8* back_b = back - shift_back;
         const u8* drawn_f = drawn - shift_front;
         const u8* drawn_m = drawn - shift_main;
-        s32 x = x_lo;
-        for (; x + 4 <= x_hi; x += 4) {
+        if (!boxed) {
+            for (s32 x = 0; x < x_lo; ++x) {
+                s32 xf = stereo_clamp_x(x - shift_front);
+                s32 xm = stereo_clamp_x(x - shift_main);
+                dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
+            }
+        }
+        s32 x = in_lo;
+        for (; x + 4 <= in_hi; x += 4) {
             u32 f = stereo_load4(fin_f + x);
             u32 m = stereo_load4(main_m + x);
             u32 is_main = (m ^ stereo_load4(back_m + x)) | (stereo_load4(drawn_m + x) & 0x01010101u);
@@ -232,7 +251,7 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
             u32 r = stereo_pick4(is_front, main_or_back, f);
             memcpy(dst + x, &r, 4);
         }
-        for (; x < x_hi; ++x) {
+        for (; x < in_hi; ++x) {
             u8 f = fin_f[x];
             if (f != main_f[x] || (drawn_f[x] & 2)) {
                 dst[x] = f;
@@ -241,32 +260,52 @@ void stereo_compose_eye(u8* out, const u8* final_frame, s32 eye, float strength)
                 dst[x] = (m != back_m[x] || (drawn_m[x] & 1)) ? m : back_b[x];
             }
         }
-        for (s32 x = MAX(x_hi, x_lo); x < STEREO_W; ++x) {
-            s32 xf = stereo_clamp_x(x - shift_front);
-            s32 xm = stereo_clamp_x(x - shift_main);
-            dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
-        }
-        if (play_window_boxed) {
-            // 4:3 window (see play_window_boxed): near its edges, the shifted background and main layers
-            // must come from inside the window (not from the black sides, nor the edge of the background
-            // beyond it), and the sides stay black apart from the counters (the front layer).
-            s32 wx0 = Bloc_lim_W1, wx1 = Bloc_lim_W2;
-            s32 margin = MAX(MAX(abs(shift_back), abs(shift_main)), abs(shift_front)) + 1;
-            for (s32 x = 0; x < STEREO_W; ++x) {
-                if (x == wx0 + margin) x = MAX(x, wx1 - margin); // (only the columns near and outside the edges)
-                if (x >= STEREO_W) break;
+        if (!boxed) {
+            for (s32 x = MAX(x_hi, x_lo); x < STEREO_W; ++x) {
                 s32 xf = stereo_clamp_x(x - shift_front);
+                s32 xm = stereo_clamp_x(x - shift_main);
+                dst[x] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[stereo_clamp_x(x - shift_back)];
+            }
+            continue;
+        }
+        // Boxed: the black sides (only the front layer, the counters, shows there), 4 pixels at a time
+        // where the shifted front layer stays on the picture...
+        for (s32 side = 0; side < 2; ++side) {
+            s32 s0 = side ? wx1 : 0, s1 = side ? STEREO_W : wx0;
+            s32 f0 = MAX(s0, shift_front), f1 = MIN(s1, STEREO_W + shift_front); // xf = x - shift_front stays on the picture
+            s32 sx = s0;
+            for (; sx < s1 && sx < f0; ++sx) {
+                s32 xf = stereo_clamp_x(sx - shift_front);
+                dst[sx] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : 0;
+            }
+            for (; sx + 4 <= f1; sx += 4) {
+                u32 f = stereo_load4(fin_f + sx);
+                u32 is_front = (f ^ stereo_load4(main_f + sx)) | (stereo_load4(drawn_f + sx) & 0x02020202u);
+                u32 r = stereo_pick4(is_front, 0, f);
+                memcpy(dst + sx, &r, 4);
+            }
+            for (; sx < s1; ++sx) {
+                s32 xf = stereo_clamp_x(sx - shift_front);
+                dst[sx] = (fin[xf] != main[xf] || (drawn[xf] & 2)) ? fin[xf] : 0;
+            }
+        }
+        // ... and the columns just inside the window's edges (not done by the fast loop above), with the
+        // shifted positions kept inside the window.
+        for (s32 edge = 0; edge < 2; ++edge) {
+            s32 e0 = edge ? MAX(in_hi, wx0) : wx0, e1 = edge ? wx1 : MIN(in_lo, wx1);
+            if (edge && e0 < MIN(in_lo, wx1)) e0 = MIN(in_lo, wx1); // (narrow window: no column twice)
+            for (s32 ex = e0; ex < e1; ++ex) {
+                s32 xf = stereo_clamp_x(ex - shift_front);
                 if (fin[xf] != main[xf] || (drawn[xf] & 2)) {
-                    dst[x] = fin[xf];
-                } else if (x < wx0 || x >= wx1) {
-                    dst[x] = 0;
+                    dst[ex] = fin[xf];
                 } else {
-                    s32 xm = x - shift_main, xb = x - shift_back;
+                    s32 xm = ex - shift_main, xb = ex - shift_back;
                     xm = xm < wx0 ? wx0 : (xm >= wx1 ? wx1 - 1 : xm);
                     xb = xb < wx0 ? wx0 : (xb >= wx1 ? wx1 - 1 : xb);
-                    dst[x] = (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[xb];
+                    dst[ex] = (main[xm] != back[xm] || (drawn[xm] & 1)) ? main[xm] : back[xb];
                 }
             }
         }
     }
 }
+

@@ -535,7 +535,7 @@ void DrawSpriteNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf,
         for (s32 i = 0; i < size.x; ++i) {
             u8 c = sprite_pos[i];
             if (c < 160) {
-                { { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; } if (mark) mark[i] |= stereo_mark_bits; }
+                { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; }
             } else {
                 i += (c - 160);
             }
@@ -554,18 +554,36 @@ void DrawSpriteNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u8* i
         u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
+        if (mark) {
+            // (3D: the same, also recording the pixels drawn)
+            u8 bits = stereo_mark_bits;
+            while (draw_pos < draw_end) {
+                for (s32 i = 0; i < size.x; ++i) {
+                    u8 c = sprite_pos[i];
+                    if (c < 160) {
+                        draw_pos[i] = c;
+                        mark[i] |= bits;
+                    } else {
+                        i += (c - 160);
+                    }
+                }
+                sprite_pos += sprite_width;
+                draw_pos += SCREEN_WIDTH;
+                mark += SCREEN_WIDTH;
+            }
+            return;
+        }
         while (draw_pos < draw_end) {
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    { { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; } if (mark) mark[i] |= stereo_mark_bits; }
+                    draw_pos[i] = c;
                 } else {
                     i += (c - 160);
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += SCREEN_WIDTH;
-            if (mark) mark += SCREEN_WIDTH;
         }
     }
 }
@@ -578,16 +596,32 @@ void DrawSpriteNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2b_
         u8* draw_end = draw_pos + size.y * SCREEN_WIDTH;
         s32 sprite_width = saved_sprite_width; // this was saved in clip_sprite_on_screen()
         u8* sprite_pos = image_data;
+        if (mark) {
+            // (3D: the same, also recording the pixels drawn)
+            u8 bits = stereo_mark_bits;
+            while (draw_pos < draw_end) {
+                for (s32 i = 0; i < size.x; ++i) {
+                    u8 c = sprite_pos[i];
+                    if (c != 0) {
+                        draw_pos[i] = c;
+                        mark[i] |= bits;
+                    }
+                }
+                sprite_pos += sprite_width;
+                draw_pos += SCREEN_WIDTH;
+                mark += SCREEN_WIDTH;
+            }
+            return;
+        }
         while (draw_pos < draw_end) {
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c != 0) {
-                    { { draw_pos[i] = c; if (mark) mark[i] |= stereo_mark_bits; } if (mark) mark[i] |= stereo_mark_bits; }
+                    draw_pos[i] = c;
                 }
             }
             sprite_pos += sprite_width;
             draw_pos += SCREEN_WIDTH;
-            if (mark) mark += SCREEN_WIDTH;
         }
     }
 }
@@ -603,7 +637,7 @@ void DrawSpriteFlipNormalNoClip(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_
         for (s32 i = 0; i < size.x; ++i) {
             u8 c = sprite_pos[i];
             if (c < 160) {
-                { { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
+                { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
             } else {
                 i += (c - 160);
             }
@@ -626,7 +660,7 @@ void DrawSpriteFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_buf, u
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    { { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 } else {
                     i += (c - 160);
                 }
@@ -650,7 +684,7 @@ void DrawSpriteFlipNormal256(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, ve
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c != 0) {
-                    { { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 }
             }
             sprite_pos += sprite_width;
@@ -674,7 +708,7 @@ void DrawSpriteColorNormal(s32 x /*eax*/, s32 color /*edx*/, s32 y /*ebx*/, vec2
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    { { draw_pos[i] = c | current_color; if (mark) mark[i] |= stereo_mark_bits; } if (mark) mark[i] |= stereo_mark_bits; }
+                    { draw_pos[i] = c | current_color; if (mark) mark[i] |= stereo_mark_bits; }
                 } else {
                     i += (c - 160);
                 }
@@ -700,7 +734,7 @@ void DrawSpriteColorFlipNormal(s32 x, s32 color, s32 y, vec2b_t size, u8* draw_b
             for (s32 i = 0; i < size.x; ++i) {
                 u8 c = sprite_pos[i];
                 if (c < 160) {
-                    { { draw_pos[size.x - i - 1] = c | current_color; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
+                    { draw_pos[size.x - i - 1] = c | current_color; if (mark) mark[size.x - i - 1] |= stereo_mark_bits; } // reverse order (flipped)
                 } else {
                     i += (c - 160);
                 }
