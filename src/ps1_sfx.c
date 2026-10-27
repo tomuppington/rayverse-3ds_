@@ -115,9 +115,19 @@ void ps1_sfx_load_fixed(void) {
     ps1_sfx_enabled = ps1_sfx_load_file(&ps1_sfx_fixed, "FIX", table);
     printf("Sound effects: %s\n", ps1_sfx_enabled ? "PlayStation (SoundPS1 folder)" : "PC");
     if (!ps1_sfx_enabled) return;
+    FILE* yeah = fopen("MusicPS1/YEAH.ogg", "rb");
+    bool yeah_jingle = yeah != NULL;
+    if (yeah) fclose(yeah);
     for (s32 i = 0; i < 256; ++i) {
         const u8* e = table + i * 5; // note, recording, tone, volume, flags
         if (e[1] == 255 && ps1_sfx_pc_table[i].prog != 255) {
+            // Sounds 104-109 are Rayman's voice at the end of a level (e.g. 107, a record scratch, with his
+            // victory dance). The PS1 plays none of them: its level-won jingle ("Yeah!", MusicPS1/YEAH.ogg)
+            // has his voice instead. With that jingle there, they stay silent, as on the PS1.
+            if (i >= 104 && i <= 109 && yeah_jingle) {
+                hard_sound_table[i].prog = 255;
+                continue;
+            }
             ps1_sfx_pc_sound[i] = true; // keep the PC recording
             continue;
         }
